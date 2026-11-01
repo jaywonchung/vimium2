@@ -1,6 +1,6 @@
-import "../lib/utils.js";
-import "../lib/settings.js";
-import "../lib/url_utils.js";
+import "../core/lib/utils.js";
+import "../core/lib/settings.js";
+import "../core/lib/url_utils.js";
 import "../background_scripts/tab_recency.js";
 import * as bgUtils from "../background_scripts/bg_utils.js";
 import "../background_scripts/all_commands.js";
@@ -91,9 +91,9 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(onURLChange); // history.
 chrome.webNavigation.onReferenceFragmentUpdated.addListener(onURLChange); // Hash changed.
 
 if (!globalThis.isUnitTests) {
-  // Cache "content_scripts/vimium.css" in chrome.storage.session for UI components.
+  // Cache "core/content_scripts/vimium.css" in chrome.storage.session for UI components.
   (function () {
-    const url = chrome.runtime.getURL("content_scripts/vimium.css");
+    const url = chrome.runtime.getURL("core/content_scripts/vimium.css");
     fetch(url).then(async (response) => {
       if (response.ok) {
         chrome.storage.session.set({ vimiumCSSInChromeStorage: await response.text() });

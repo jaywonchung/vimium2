@@ -1,5 +1,5 @@
 import "./test_helper.js";
-import "../../lib/handler_stack.js";
+import "../../core/lib/handler_stack.js";
 
 context("handlerStack", () => {
   let handlerStack, handler1Called, handler2Called;

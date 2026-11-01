@@ -1,6 +1,6 @@
 import "./test_helper.js";
 import { withPromise } from "./test_helper.js";
-import "../../lib/settings.js";
+import "../../core/lib/settings.js";
 import "../../background_scripts/main.js";
 import { RegistryEntry } from "../../background_scripts/commands.js";
 

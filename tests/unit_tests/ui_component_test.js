@@ -1,8 +1,8 @@
 import * as testHelper from "./test_helper.js";
-import "../../lib/utils.js";
-import "../../lib/dom_utils.js";
-import "../../lib/settings.js";
-import "../../content_scripts/ui_component.js";
+import "../../core/lib/utils.js";
+import "../../core/lib/dom_utils.js";
+import "../../core/lib/settings.js";
+import "../../core/content_scripts/ui_component.js";
 
 function stubPostMessage(iframeEl, fn) {
   if (!iframeEl || !fn) throw new Error("iframeEl and fn are required.");

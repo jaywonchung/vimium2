@@ -299,7 +299,7 @@ const flashFrame = (() => {
 
       // Inject stylesheet.
       const styleEl = DomUtils.createElement("style");
-      const vimiumCssUrl = chrome.runtime.getURL("content_scripts/vimium.css");
+      const vimiumCssUrl = chrome.runtime.getURL("core/content_scripts/vimium.css");
       styleEl.textContent = `@import url("${vimiumCssUrl}");`;
       shadowDOM.appendChild(styleEl);
 

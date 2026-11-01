@@ -1,5 +1,5 @@
 import "./test_helper.js";
-import "../../lib/settings.js";
+import "../../core/lib/settings.js";
 
 context("settings", () => {
   context("v2.0 migration", () => {

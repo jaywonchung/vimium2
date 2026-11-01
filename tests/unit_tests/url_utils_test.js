@@ -1,6 +1,6 @@
 import "./test_helper.js";
-import "../../lib/settings.js";
-import "../../lib/url_utils.js";
+import "../../core/lib/settings.js";
+import "../../core/lib/url_utils.js";
 
 context("isUrl", () => {
   should("accept valid URLs", async () => {

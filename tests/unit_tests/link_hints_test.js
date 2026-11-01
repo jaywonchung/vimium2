@@ -1,8 +1,8 @@
 import "./test_helper.js";
-import "../../lib/keyboard_utils.js";
-import "../../lib/settings.js";
-import "../../content_scripts/mode.js";
-import "../../content_scripts/link_hints.js";
+import "../../core/lib/keyboard_utils.js";
+import "../../core/lib/settings.js";
+import "../../core/content_scripts/mode.js";
+import "../../core/content_scripts/link_hints.js";
 
 context("With insufficient link characters", () => {
   setup(async () => {

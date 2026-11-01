@@ -1,9 +1,9 @@
-import "../lib/chrome_api_stubs.js";
-import "../lib/utils.js";
-import "../lib/dom_utils.js";
-import "../lib/settings.js";
-import "../lib/keyboard_utils.js";
-import "../lib/find_mode_history.js";
+import "../core/lib/chrome_api_stubs.js";
+import "../core/lib/utils.js";
+import "../core/lib/dom_utils.js";
+import "../core/lib/settings.js";
+import "../core/lib/keyboard_utils.js";
+import "../core/lib/find_mode_history.js";
 import * as UIComponentMessenger from "./ui_component_messenger.js";
 
 let findMode = null;

@@ -3,7 +3,7 @@
 //
 
 import * as bgUtils from "../background_scripts/bg_utils.js";
-import "../lib/url_utils.js";
+import "../core/lib/url_utils.js";
 
 // Opens request.url in the current tab. If the URL is keywords, search for them in the default
 // search engine. If the URL is a javascript: snippet, execute it in the current tab.

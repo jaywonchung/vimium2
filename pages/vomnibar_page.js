@@ -4,13 +4,13 @@
 // the page, and simplify key handling in vimium_frontend.js
 //
 
-import "../lib/types.js";
-import "../lib/utils.js";
-import "../lib/url_utils.js";
-import "../lib/settings.js";
-import "../lib/keyboard_utils.js";
-import "../lib/dom_utils.js";
-import "../lib/handler_stack.js";
+import "../core/lib/types.js";
+import "../core/lib/utils.js";
+import "../core/lib/url_utils.js";
+import "../core/lib/settings.js";
+import "../core/lib/keyboard_utils.js";
+import "../core/lib/dom_utils.js";
+import "../core/lib/handler_stack.js";
 import * as UIComponentMessenger from "./ui_component_messenger.js";
 import * as userSearchEngines from "../background_scripts/user_search_engines.js";
 

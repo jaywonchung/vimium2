@@ -1,6 +1,6 @@
 import "./test_helper.js";
-import "../../lib/settings.js";
-import "../../lib/keyboard_utils.js";
+import "../../core/lib/settings.js";
+import "../../core/lib/keyboard_utils.js";
 import { allCommands } from "../../background_scripts/all_commands.js";
 import {
   Commands,
@@ -8,16 +8,16 @@ import {
   KeyMappingsParser,
   parseLines,
 } from "../../background_scripts/commands.js";
-import "../../content_scripts/mode.js";
-import "../../content_scripts/mode_key_handler.js";
-import "../../content_scripts/marks.js";
-import "../../content_scripts/link_hints.js";
-import "../../content_scripts/vomnibar.js";
+import "../../core/content_scripts/mode.js";
+import "../../core/content_scripts/mode_key_handler.js";
+import "../../core/content_scripts/marks.js";
+import "../../core/content_scripts/link_hints.js";
+import "../../core/content_scripts/vomnibar.js";
 // Include mode_normal to check that all commands have been implemented.
-import "../../content_scripts/mode_normal.js";
-import "../../content_scripts/link_hints.js";
-import "../../content_scripts/marks.js";
-import "../../content_scripts/vomnibar.js";
+import "../../core/content_scripts/mode_normal.js";
+import "../../core/content_scripts/link_hints.js";
+import "../../core/content_scripts/marks.js";
+import "../../core/content_scripts/vomnibar.js";
 
 await Commands.init();
 

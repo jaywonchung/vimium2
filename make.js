@@ -105,10 +105,10 @@ async function checkForCommonBuildIssues() {
   }
 
   // Ensure debug logging is turned off.
-  const text = await Deno.readTextFile("./lib/utils.js");
+  const text = await Deno.readTextFile("./core/lib/utils.js");
   if (!text.includes("debug: false")) {
     throw new Error(
-      "It looks like debug logging is turned on in lib/utils.js. " +
+      "It looks like debug logging is turned on in core/lib/utils.js. " +
         "It should be off in builds for the store.",
     );
   }

@@ -1,7 +1,7 @@
 import "../test_helper.js";
 import * as ranking from "../../../background_scripts/completion/ranking.js";
 import { RegexpCache } from "../../../background_scripts/completion/ranking.js";
-import "../../../lib/url_utils.js";
+import "../../../core/lib/url_utils.js";
 
 context("wordRelevancy", () => {
   should("score higher in shorter URLs", () => {

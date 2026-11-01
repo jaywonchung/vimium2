@@ -1,5 +1,5 @@
 import "./test_helper.js";
-import "../../lib/settings.js";
+import "../../core/lib/settings.js";
 import "../../background_scripts/bg_utils.js";
 import * as exclusions from "../../background_scripts/exclusions.js";
 import "../../background_scripts/commands.js";

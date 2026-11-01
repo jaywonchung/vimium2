@@ -1,5 +1,5 @@
 import "./test_helper.js";
-import "../../lib/settings.js";
+import "../../core/lib/settings.js";
 import * as to from "../../background_scripts/tab_operations.js";
 
 context("TabOperations openurlInCurrentTab", () => {

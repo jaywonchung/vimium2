@@ -1,6 +1,6 @@
-import "../lib/utils.js";
-import "../lib/dom_utils.js";
-import "../lib/settings.js";
+import "../core/lib/utils.js";
+import "../core/lib/dom_utils.js";
+import "../core/lib/settings.js";
 
 import * as bgUtils from "../background_scripts/bg_utils.js";
 import { ExclusionRulesEditor } from "./exclusion_rules_editor.js";

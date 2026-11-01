@@ -45,30 +45,30 @@
         "<all_urls>"
       ],
       "js": [
-        "lib/types.js",
-        "lib/utils.js",
-        "lib/keyboard_utils.js",
-        "lib/dom_utils.js",
-        "lib/rect.js",
-        "lib/handler_stack.js",
-        "lib/settings.js",
-        "lib/find_mode_history.js",
-        "content_scripts/mode.js",
-        "content_scripts/ui_component.js",
-        "content_scripts/link_hints.js",
-        "content_scripts/vomnibar.js",
-        "content_scripts/scroller.js",
-        "content_scripts/marks.js",
-        "content_scripts/mode_insert.js",
-        "content_scripts/mode_find.js",
-        "content_scripts/mode_key_handler.js",
-        "content_scripts/mode_visual.js",
-        "content_scripts/hud.js",
-        "content_scripts/mode_normal.js",
-        "content_scripts/vimium_frontend.js"
+        "core/lib/types.js",
+        "core/lib/utils.js",
+        "core/lib/keyboard_utils.js",
+        "core/lib/dom_utils.js",
+        "core/lib/rect.js",
+        "core/lib/handler_stack.js",
+        "core/lib/settings.js",
+        "core/lib/find_mode_history.js",
+        "core/content_scripts/mode.js",
+        "core/content_scripts/ui_component.js",
+        "core/content_scripts/link_hints.js",
+        "core/content_scripts/vomnibar.js",
+        "core/content_scripts/scroller.js",
+        "core/content_scripts/marks.js",
+        "core/content_scripts/mode_insert.js",
+        "core/content_scripts/mode_find.js",
+        "core/content_scripts/mode_key_handler.js",
+        "core/content_scripts/mode_visual.js",
+        "core/content_scripts/hud.js",
+        "core/content_scripts/mode_normal.js",
+        "core/content_scripts/vimium_frontend.js"
       ],
       "css": [
-        "content_scripts/vimium.css"
+        "core/content_scripts/vimium.css"
       ],
       "run_at": "document_start",
       "all_frames": true,
@@ -80,7 +80,7 @@
         "file:///*/"
       ],
       "css": [
-        "content_scripts/file_urls.css"
+        "core/content_scripts/file_urls.css"
       ],
       "run_at": "document_start",
       "all_frames": true
@@ -107,7 +107,7 @@
     {
       "resources": [
         "pages/vomnibar_page.html",
-        "content_scripts/vimium.css",
+        "core/content_scripts/vimium.css",
         "pages/hud_page.html",
         "pages/help_dialog_page.html",
         "pages/doc_search_completion.html",

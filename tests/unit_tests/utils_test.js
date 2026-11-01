@@ -1,6 +1,6 @@
 import "./test_helper.js";
-import "../../lib/settings.js";
-import "../../lib/url_utils.js";
+import "../../core/lib/settings.js";
+import "../../core/lib/url_utils.js";
 
 context("forTrusted", () => {
   should("invoke an event handler if the event is trusted", () => {

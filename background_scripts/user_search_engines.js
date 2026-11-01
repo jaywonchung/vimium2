@@ -1,4 +1,4 @@
-import "../lib/url_utils.js";
+import "../core/lib/url_utils.js";
 import * as commands from "./commands.js";
 
 // A struct representing a search engine entry in the "searchEngine" setting.

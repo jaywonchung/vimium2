@@ -1,5 +1,5 @@
 // This // implements find-mode query history as a list of raw queries, most recent first.
-// This is under lib/ since it is used by both content scripts and iframes from pages/.
+// This is under core/lib/ since it is used by both content scripts and iframes from pages/.
 const FindModeHistory = {
   storage: chrome.storage.session,
   key: "findModeRawQueryList",

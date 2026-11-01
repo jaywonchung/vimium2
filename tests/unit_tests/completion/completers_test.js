@@ -16,7 +16,7 @@ import {
   Suggestion,
   TabCompleter,
 } from "../../../background_scripts/completion/completers.js";
-import "../../../lib/url_utils.js";
+import "../../../core/lib/url_utils.js";
 import { Commands, RegistryEntry } from "../../../background_scripts/commands.js";
 import { allCommands } from "../../../background_scripts/all_commands.js";
 

@@ -1,5 +1,5 @@
 import "./test_helper.js";
-import "../../lib/rect.js";
+import "../../core/lib/rect.js";
 
 context("Rect", () => {
   should("set rect properties correctly", () => {
