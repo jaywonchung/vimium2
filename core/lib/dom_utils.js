@@ -350,7 +350,18 @@ const DomUtils = {
       "click",
     ];
     for (const event of eventSequence) {
-      this.simulateMouseEvent(event, element, modifiers);
+      const defaultAction = (click) => {
+        if (!click.defaultPrevented) {
+          this.simulateClickDefaultAction(element.closest("a"), modifiers, click);
+        }
+      };
+      const emulate = Backend.emulateClickDefaultAction && event === "click";
+      if (emulate) globalThis.addEventListener("click", defaultAction);
+      try {
+        this.simulateMouseEvent(event, element, modifiers);
+      } finally {
+        if (emulate) globalThis.removeEventListener("click", defaultAction);
+      }
     }
   },
 
@@ -383,11 +394,11 @@ const DomUtils = {
     return element.dispatchEvent(mouseEvent);
   },
 
-  simulateClickDefaultAction(element, modifiers) {
+  simulateClickDefaultAction(element, modifiers, event) {
     let newTabModifier;
     if (modifiers == null) modifiers = {};
     if (
-      ((element.tagName != null ? element.tagName.toLowerCase() : undefined) !== "a") ||
+      element?.tagName?.toLowerCase() !== "a" ||
       !element.href
     ) return;
 
@@ -401,6 +412,7 @@ const DomUtils = {
     }
 
     if (newTabModifier) {
+      event?.preventDefault();
       // Open in new tab. Shift determines whether the tab is focused when created. Alt is ignored.
       Backend.runtime.sendMessage({
         handler: "openUrlInNewTab",
@@ -411,8 +423,10 @@ const DomUtils = {
       (shiftKey === true) && (metaKey === false) && (ctrlKey === false) && (altKey === false)
     ) {
       // Open in new window.
+      event?.preventDefault();
       Backend.runtime.sendMessage({ handler: "openUrlInNewWindow", url: element.href });
     } else if (element.target === "_blank") {
+      event?.preventDefault();
       Backend.runtime.sendMessage({ handler: "openUrlInNewTab", url: element.href, active: true });
     }
   },

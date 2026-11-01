@@ -14,7 +14,7 @@ function initRemoteBackend(config) {
   let coreReady = false;
 
   function fail(error) {
-    failed = true;
+    failed = ["CORE_MISMATCH", "BRIDGE_REJECTED"].includes(error.code);
     alive = false;
     config.onError(error);
   }
@@ -43,10 +43,12 @@ function initRemoteBackend(config) {
       let attached = false;
       let rejected = false;
       connection.onMessage.addListener((msg) => {
+        if (connection !== currentConnection) return;
         if (msg.type === "error") {
           rejected = true;
           alive = false;
           const error = new Error(msg.error);
+          error.code = "BRIDGE_REJECTED";
           if (attached) fail(error);
           else reject(error);
           return;
@@ -58,7 +60,7 @@ function initRemoteBackend(config) {
           ) {
             rejected = true;
             connection.disconnect();
-            const error = new Error("This reader's integration needs an update.");
+            const error = new Error("This extension was patched for a different Vimium2 build.");
             error.code = "CORE_MISMATCH";
             reject(error);
             return;
@@ -68,7 +70,10 @@ function initRemoteBackend(config) {
           updateCache(cachedSession, msg.storage.session, "session");
           attached = true;
           alive = true;
-          if (coreReady) connection.postMessage({ type: "ready" });
+          if (coreReady) {
+            connection.postMessage({ type: "ready" });
+            config.onConnected();
+          }
           resolve();
         } else if (msg.type === "storageChanged" && attached) {
           const cache = { sync: cachedSettings, session: cachedSession }[msg.area];
@@ -92,82 +97,32 @@ function initRemoteBackend(config) {
       });
       connection.onDisconnect.addListener(() => {
         const error = chrome.runtime.lastError;
+        if (connection !== currentConnection) return;
         alive = false;
         if (rejected) return;
         if (!attached) {
           const failure = new Error(
-            "Cannot connect to Vimium2. Check its extension ID, enable it, and reload this reader. " +
+            "Cannot connect to Vimium2. Check its extension ID, enable it, and reload this page. " +
               (error?.message ?? ""),
           );
           reject(failure);
           return;
         }
-        reconnecting = null;
+        // An open Vimium UI frame must still be able to send commands to this extension page.
+        setTimeout(() => reconnect().catch(() => {}), 0);
       });
     });
   }
 
-  function dispatchMessage(message, respond = () => {}, forceTopFrame = false) {
-    if (forceTopFrame && message.handler === "runInTopFrame") {
-      const command = NormalModeCommands[message.registryEntry.command];
-      if (!command) throw new Error("Unsupported reader command: " + message.registryEntry.command);
-      return Promise.resolve(command(message.sourceFrameId, message.registryEntry)).then(respond);
-    }
+  function dispatchMessage(message, respond = () => {}) {
+    if (message.handler === "getPageUrl") return respond(Backend.getPageUrl());
     for (const listener of listeners.keys()) {
       if (listener(message, { id: VIMIUM_ID }, respond) === true) return;
     }
     respond(null);
   }
 
-  const localHandlers = {
-    userIsInteractingWithThePage() {
-      return null;
-    },
-    getBrowserInfo() {
-      return { isFirefox: false, firefoxVersion: null };
-    },
-    runBackgroundCommand(request) {
-      if (request.registryEntry?.command === "reload") {
-        location.reload();
-        return null;
-      }
-      return undefined;
-    },
-    prepareToActivateLinkHintsMode(request) {
-      // Short-circuit multi-frame coordination for single-frame bridge mode.
-      setTimeout(() => {
-        if (typeof HintCoordinator === "undefined") return;
-        HintCoordinator.getHintDescriptors(request);
-        HintCoordinator.activateMode({
-          frameId: globalThis.frameId ?? 0,
-          frameIdToHintDescriptors: {},
-          modeIndex: request.modeIndex,
-          originatingFrameId: globalThis.frameId ?? 0,
-        });
-      }, 0);
-      return null;
-    },
-    broadcastLinkHintsMessage(request) {
-      setTimeout(() => {
-        if (
-          typeof HintCoordinator !== "undefined" &&
-          HintCoordinator.willHandleMessage(request.messageType)
-        ) {
-          HintCoordinator[request.messageType](request);
-        }
-      }, 0);
-      return null;
-    },
-    linkHintsMessage() {
-      return null;
-    },
-    sendMessageToFrames(request) {
-      dispatchMessage(request.message, () => {}, true);
-      return null;
-    },
-  };
-
-  function makeStorageAdapter(cache, area) {
+  function makeStorageAdapter(cache) {
     return {
       get(keys, callback) {
         let result;
@@ -194,51 +149,23 @@ function initRemoteBackend(config) {
         }
         return Promise.resolve(result);
       },
-      set(items, callback) {
-        return writeStorage(area, "set", items, callback);
-      },
-      remove(keys, callback) {
-        return writeStorage(area, "remove", keys, callback);
-      },
-      clear(callback) {
-        return writeStorage(area, "clear", null, callback);
-      },
-      setAccessLevel() {},
     };
   }
 
-  function writeStorage(area, operation, value, callback) {
-    const result = Backend.runtime.sendMessage({ handler: "storage", area, operation, value }).then(
-      () => {
-        const cache = { sync: cachedSettings, session: cachedSession }[area];
-        const next = operation === "clear" ? {} : { ...cache };
-        if (operation === "set") Object.assign(next, value);
-        if (operation === "remove") {
-          for (const key of Array.isArray(value) ? value : [value]) delete next[key];
-        }
-        updateCache(cache, next, area);
-      },
-    );
-    if (callback) {
-      result.then(callback);
-      return;
+  function reconnect() {
+    if (failed) {
+      return Promise.reject(new Error("Vimium2 is disconnected. Reload this extension page."));
     }
-    return result;
+    if (alive) return Promise.resolve();
+    return reconnecting ??= attach().catch((error) => {
+      fail(error);
+      throw error;
+    }).finally(() => {
+      reconnecting = null;
+    });
   }
 
   function configureBackend() {
-    const reconnect = () => {
-      if (failed) {
-        return Promise.reject(new Error("Vimium2 is disconnected. Reload this reader tab."));
-      }
-      if (alive) return Promise.resolve();
-      return reconnecting ??= attach().catch((error) => {
-        fail(error);
-        throw error;
-      }).finally(() => {
-        reconnecting = null;
-      });
-    };
     globalThis.addEventListener("focus", () => {
       if (!failed) reconnect().catch(() => {});
     });
@@ -250,25 +177,15 @@ function initRemoteBackend(config) {
       message = structuredClone(message);
       const send = async () => {
         await reconnect();
-        const handler = localHandlers[message.handler];
-        if (handler) {
-          const result = handler(message);
-          if (result !== undefined) return result;
-        }
-        const response = await chrome.runtime.sendMessage(VIMIUM_ID, message);
+        const response = await chrome.runtime.sendMessage(VIMIUM_ID, {
+          ...message,
+          pageUrl: Backend.getPageUrl(),
+        });
         if (response?.error) throw new Error(response.error);
         return response;
       };
-      const result = send().catch((error) => {
-        if (typeof HUD !== "undefined") HUD.show(error.message, 3000);
-        else config.onError(error);
-        if (["runBackgroundCommand", "gotoMark"].includes(message.handler)) return null;
-        throw error;
-      });
-      if (callback) {
-        result.then(callback);
-        return;
-      }
+      const result = send();
+      if (callback) return result.then(callback);
       return result;
     };
     Backend.runtime.onMessage = {
@@ -280,17 +197,17 @@ function initRemoteBackend(config) {
       },
     };
     Backend.storage = {
-      sync: makeStorageAdapter(cachedSettings, "sync"),
-      session: makeStorageAdapter(cachedSession, "session"),
-      local: {
-        get(key, callback) {
-          const result = Backend.runtime.sendMessage({ handler: "hasMark", key }).then((exists) =>
-            exists ? { [key]: true } : {}
-          );
-          if (callback) {
-            result.then(callback);
-            return;
-          }
+      sync: makeStorageAdapter(cachedSettings),
+      session: {
+        ...makeStorageAdapter(cachedSession),
+        set(items, callback) {
+          const result = Backend.runtime.sendMessage({
+            handler: "storage",
+            area: "session",
+            operation: "set",
+            value: items,
+          }).then(() => updateCache(cachedSession, { ...cachedSession, ...items }, "session"));
+          if (callback) return result.then(callback);
           return result;
         },
       },
@@ -302,79 +219,43 @@ function initRemoteBackend(config) {
     };
     Backend.runtime.getURL = (path) => "chrome-extension://" + VIMIUM_ID + "/" + path;
     Backend.runtime.getManifest = () => ({ version });
+    Backend.emulateClickDefaultAction = true;
+    Backend.writeClipboard = (text) => {
+      const textarea = document.createElement("textarea");
+      textarea.value = text.replace(/\xa0/g, " ");
+      textarea.style.cssText = "position:fixed;opacity:0;left:-9999px";
+      const focusedElement = document.activeElement;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        if (!document.execCommand("copy")) throw new Error("Clipboard write failed.");
+      } finally {
+        textarea.remove();
+        focusedElement?.focus();
+      }
+    };
     Backend.isAlive = () => !failed;
+    Backend.isPageRoot = () => true;
     Backend.isIncognito = () => !!chrome.extension?.inIncognitoContext;
+    const getPageUrl = config.getPageUrl ?? Backend.getPageUrl;
+    Backend.getPageUrl = () => {
+      const url = new URL(getPageUrl());
+      const isOwnPage = url.protocol === "chrome-extension:" && url.hostname === location.hostname;
+      if (!["http:", "https:", "file:", "blob:"].includes(url.protocol) && !isOwnPage) {
+        throw new Error("Unsupported extension page URL.");
+      }
+      return url.href;
+    };
+    if (config.navigateInTab) {
+      Backend.navigate = (url) =>
+        Backend.runtime.sendMessage({ handler: "openUrlInCurrentTab", url });
+    }
   }
 
-  async function applyPostLoadPatches() {
-    await Settings.onLoaded();
-    const userStyle = document.createElement("style");
-    document.head.appendChild(userStyle);
-    const updateStyle = () => {
-      userStyle.textContent = Settings.get("userDefinedLinkHintCss");
-    };
-    updateStyle();
-    Settings.addEventListener("change", updateStyle);
-    if (
-      typeof DomUtils !== "undefined" && typeof KeyboardUtils !== "undefined"
-    ) {
-      const origSimulateClick = DomUtils.simulateClick.bind(DomUtils);
-      DomUtils.simulateClick = function (element, modifiers) {
-        if (modifiers) {
-          const isMac = KeyboardUtils.platform === "Mac";
-          const isNewTab = isMac
-            ? (modifiers.metaKey && !modifiers.ctrlKey)
-            : (!modifiers.metaKey && modifiers.ctrlKey);
-          if (isNewTab) {
-            const href = element.href || element.closest?.("a")?.href;
-            if (href) {
-              Backend.runtime.sendMessage({
-                handler: "openUrlInNewTab",
-                url: href,
-                active: !!modifiers.shiftKey,
-              });
-              return;
-            }
-          }
-        }
-        return origSimulateClick(element, modifiers);
-      };
-    }
-
-    if (typeof HUD !== "undefined") {
-      HUD.copyToClipboard = function (text) {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.cssText = "position:fixed;opacity:0;left:-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        try {
-          if (!document.execCommand("copy")) throw new Error("Clipboard write failed.");
-          return true;
-        } catch (error) {
-          HUD.show(error.message, 3000);
-          return false;
-        } finally {
-          ta.remove();
-        }
-      };
-    }
-
-    if (typeof HUD !== "undefined") {
-      const origHide = HUD.hide.bind(HUD);
-      HUD.hide = function (...args) {
-        origHide(...args);
-        // If focus is on a vimium-reset element (HUD wrapper), return it to the page
-        if (document.activeElement?.classList?.contains("vimium-reset")) {
-          document.activeElement.blur();
-          globalThis.focus();
-        }
-      };
-    }
-
+  function coreLoaded() {
     coreReady = true;
     currentConnection.postMessage({ type: "ready" });
   }
 
-  return { attach, configureBackend, applyPostLoadPatches };
+  return { attach, configureBackend, coreLoaded };
 }

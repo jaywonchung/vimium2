@@ -2,6 +2,7 @@ import "../../core/backend.js";
 import * as shoulda from "../vendor/shoulda.js";
 import * as jsdom from "jsdom";
 import "./test_chrome_stubs.js";
+import "../../local_backend.js";
 import "../../core/lib/utils.js";
 
 export { withPromise } from "./test_chrome_stubs.js";

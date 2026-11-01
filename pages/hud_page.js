@@ -1,4 +1,6 @@
+import "../core/backend.js";
 import "../core/lib/chrome_api_stubs.js";
+import "../local_backend.js";
 import "../core/lib/utils.js";
 import "../core/lib/dom_utils.js";
 import "../core/lib/settings.js";
@@ -184,20 +186,24 @@ export const handlers = {
   },
 
   copyToClipboard(message) {
-    if (!ensureClipboardIsAvailable()) return;
     Utils.setTimeout(TIME_TO_WAIT_FOR_IPC_MESSAGES, async function () {
       const focusedElement = document.activeElement;
       // In Chrome, if we do not focus the current window before invoking navigator.clipboard APIs,
       // the error "DOMException: Document is not focused." is thrown.
-      globalThis.focus();
-
-      // Replace nbsp; characters with space. See #2217.
-      const value = message.data.replace(/\xa0/g, " ");
-      await navigator.clipboard.writeText(value);
-
-      if (focusedElement != null) focusedElement.focus();
-      globalThis.parent.focus();
-      UIComponentMessenger.postMessage({ name: "unfocusIfFocused" });
+      let error;
+      try {
+        if (!navigator.clipboard) throw new Error("Clipboard access is unavailable.");
+        globalThis.focus();
+        // Replace nbsp; characters with space. See #2217.
+        await navigator.clipboard.writeText(message.data.replace(/\xa0/g, " "));
+      } catch (failure) {
+        error = failure.message;
+      } finally {
+        if (focusedElement != null) focusedElement.focus();
+        globalThis.parent.focus();
+        UIComponentMessenger.postMessage({ name: "unfocusIfFocused" });
+        UIComponentMessenger.postMessage({ name: "copyResponse", id: message.id, error });
+      }
     });
   },
 

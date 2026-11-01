@@ -3,7 +3,12 @@
 //
 
 let ownerPagePort = null;
+let ownerExtensionId = null;
 let handleMessage = null;
+
+export function getOwnerExtensionId() {
+  return ownerExtensionId;
+}
 
 export async function registerPortWithOwnerPage(event) {
   if (event.source !== globalThis.parent) return;
@@ -28,6 +33,7 @@ export async function registerPortWithOwnerPage(event) {
 // Used by unit tests.
 export function unregister() {
   ownerPagePort = null;
+  ownerExtensionId = null;
   handleMessage = null;
 }
 
@@ -37,9 +43,11 @@ export function init() {
 
 function openPort(port, bridgeId) {
   ownerPagePort = port;
+  ownerExtensionId = bridgeId;
   const revoke = () => {
     ownerPagePort?.close();
     ownerPagePort = null;
+    ownerExtensionId = null;
     handleMessage = null;
     globalThis.location.replace("about:blank");
   };

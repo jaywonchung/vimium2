@@ -59,20 +59,26 @@ class NormalMode extends KeyHandlerMode {
       if (!result) return;
     }
 
+    let result;
     if (registryEntry.topFrame) {
       // We never return to a UI-component frame (e.g. the help dialog), it might have lost the
       // focus.
       const sourceFrameId = globalThis.isVimiumUIComponent ? 0 : frameId;
-      Backend.runtime.sendMessage({
+      result = Backend.runtime.sendMessage({
         handler: "sendMessageToFrames",
         message: { handler: "runInTopFrame", sourceFrameId, registryEntry },
       });
     } else if (registryEntry.background) {
-      Backend.runtime.sendMessage({ handler: "runBackgroundCommand", registryEntry, count });
+      result = Backend.runtime.sendMessage({
+        handler: "runBackgroundCommand",
+        registryEntry,
+        count,
+      });
     } else {
       const commandFn = NormalModeCommands[registryEntry.command];
-      commandFn(count, { registryEntry });
+      result = commandFn(count, { registryEntry });
     }
+    Promise.resolve(result).catch((error) => HUD.show(error.message, 3000));
   }
 }
 
@@ -146,37 +152,33 @@ const NormalModeCommands = {
 
   // Url manipulation.
   goUp(count) {
-    let url = globalThis.location.href;
-    if (url.endsWith("/")) {
-      url = url.substring(0, url.length - 1);
-    }
-
-    let urlsplit = url.split("/");
-    // make sure we haven't hit the base domain yet
-    if (urlsplit.length > 3) {
-      urlsplit = urlsplit.slice(0, Math.max(3, urlsplit.length - count));
-      globalThis.location.href = urlsplit.join("/");
-    }
+    const url = new URL(Backend.getPageUrl());
+    const parts = url.pathname.replace(/\/$/, "").split("/");
+    if (parts.length < 2) return;
+    url.pathname = parts.slice(0, Math.max(1, parts.length - count)).join("/") || "/";
+    url.search = "";
+    url.hash = "";
+    return Backend.navigate(url.href);
   },
 
   goToRoot() {
-    globalThis.location.href = globalThis.location.origin;
+    return Backend.navigate(new URL("/", Backend.getPageUrl()).href);
   },
 
   toggleViewSource() {
-    Backend.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
+    return Backend.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
       if (url.substr(0, 12) === "view-source:") {
         url = url.substr(12, url.length - 12);
       } else {
         url = "view-source:" + url;
       }
-      Backend.runtime.sendMessage({ handler: "openUrlInNewTab", url });
+      return Backend.runtime.sendMessage({ handler: "openUrlInNewTab", url });
     });
   },
 
   copyCurrentUrl() {
-    Backend.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
-      if (HUD.copyToClipboard(url) === false) return;
+    return Backend.runtime.sendMessage({ handler: "getCurrentTabUrl" }, async function (url) {
+      if (await HUD.copyToClipboard(url) === false) return;
       // This length is determined empirically based on a 350px width of the HUD. An alternate
       // solution is to have the HUD ellipsize based on its width.
       const maxLength = 40;
@@ -401,7 +403,7 @@ const textInputXPath = (function () {
 // used by the findAndFollow* functions.
 const followLink = function (linkElement) {
   if (linkElement.nodeName.toLowerCase() === "link") {
-    globalThis.location.href = linkElement.href;
+    return Backend.navigate(linkElement.href);
   } else {
     // if we can click on it, don't simply set location.href: some next/prev links are meant to
     // trigger AJAX calls, like the 'more' button on GitHub's newsfeed.

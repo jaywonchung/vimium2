@@ -19,9 +19,11 @@
   },
   "tasks": {
     "build": "deno run -A scripts/build.js",
+    "patch": "deno run -A integrations/patch.js",
     "test:unit": "deno run -A make.js test-unit",
     "test:dom": "deno run -A make.js test-dom",
-    "test:bridge": "deno test -A tests/bridge_test.js",
-    "test:bridge-browser": "deno run -A tests/e2e/bridge.js"
+    "test:bridge-browser": "deno run -A tests/e2e/bridge.js",
+    "test:patcher": "deno test -A tests/patcher_test.js",
+    "test:e2e": "deno run -A tests/e2e/readers.js"
   }
 }

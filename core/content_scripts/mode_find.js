@@ -103,8 +103,7 @@ class FindMode extends Mode {
     FindMode.query = { rawQuery: "" };
 
     if (options.returnToViewport) {
-      this.scrollX = globalThis.scrollX;
-      this.scrollY = globalThis.scrollY;
+      this.initialScrollPosition = Scroller.getScrollPosition();
     }
 
     super.init(Object.assign(options, {
@@ -386,7 +385,7 @@ class FindMode extends Mode {
 
   checkReturnToViewPort() {
     if (this.options.returnToViewport) {
-      globalThis.scrollTo(this.scrollX, this.scrollY);
+      Scroller.restoreScrollPosition(this.initialScrollPosition);
     }
   }
 }
@@ -472,15 +471,18 @@ const highlight = (textNode, startIndex, length) => {
   selection.removeAllRanges();
   selection.addRange(range);
 
-  // Ensure the highlighted element is visible within the viewport.
+  // Ensure the selected text is visible within the viewport.
   const rect = range.getBoundingClientRect();
-  if (rect.top < 0 || rect.bottom > globalThis.innerHeight) {
-    const screenHeight = globalThis.innerHeight;
-    globalThis.scrollTo({
-      top: globalThis.scrollY + rect.top + rect.height / 2 - screenHeight / 2,
-      // Scroll instantly when we find a search result. This matches the behavior of Chrome and
-      // Firefox's native search UI. See #4661.
-      behavior: "instant",
+  const viewport = Scroller.getViewportRect();
+  const outsideY = rect.top < viewport.top || rect.bottom > viewport.bottom;
+  const outsideX = rect.left < viewport.left || rect.right > viewport.right;
+  if (outsideX || outsideY) {
+    const { scrollX, scrollY } = Scroller.getScrollPosition();
+    Scroller.restoreScrollPosition({
+      scrollX: scrollX +
+        (outsideX ? (rect.left + rect.right - viewport.left - viewport.right) / 2 : 0),
+      scrollY: scrollY +
+        (outsideY ? (rect.top + rect.bottom - viewport.top - viewport.bottom) / 2 : 0),
     });
   }
 

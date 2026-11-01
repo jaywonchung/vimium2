@@ -12,6 +12,10 @@ const allowedHandlers = new Set([
   "domReady",
   "runBackgroundCommand",
   "getCurrentTabUrl",
+  "getBrowserInfo",
+  "sendMessageToFrames",
+  "prepareToActivateLinkHintsMode",
+  "broadcastLinkHintsMessage",
   "openUrlInNewTab",
   "openUrlInCurrentTab",
   "openUrlInNewWindow",
@@ -21,9 +25,18 @@ const allowedHandlers = new Set([
 ]);
 
 export function isBridgeSender(sender) {
-  return !!sender?.id && sender.tab?.id != null &&
+  return !!sender?.id &&
     Settings.get("allowedBridgeExtensions").includes(sender.id) &&
     sender.url?.startsWith(`chrome-extension://${sender.id}/`);
+}
+
+function validateBridgeSender(sender) {
+  if (!isBridgeSender(sender)) {
+    throw new Error("Add this extension's ID to Allowed bridge extensions in Vimium2 options.");
+  }
+  if (sender.tab?.id == null) {
+    throw new Error("Vimium2 requires a page in a browser tab. Open this extension page in a tab.");
+  }
 }
 
 function keysFor(sender) {
@@ -31,24 +44,25 @@ function keysFor(sender) {
 }
 
 export function sendToTab(tabId, message, options = {}) {
+  const { includeExtensionPages = true, ...frameOptions } = options;
   const connections = [...ports.values()].filter(({ port, ready }) =>
-    ready &&
+    includeExtensionPages && ready &&
     port.sender.tab.id === tabId &&
     (options.frameId == null || port.sender.frameId === options.frameId)
   );
   const ignoreClosedReceiver = (error) => {
     if (
-      /Could not establish connection\. Receiving end does not exist\.|moved into back\/forward cache|^Reader disconnected\.$/
+      /Could not establish connection\. Receiving end does not exist\.|moved into back\/forward cache|^Extension page disconnected\.$/
         .test(error.message)
     ) return null;
     throw error;
   };
   if (!connections.length) {
-    const result = chrome.tabs.sendMessage(tabId, message, options);
+    const result = chrome.tabs.sendMessage(tabId, message, frameOptions);
     return options.frameId == null ? result.catch(ignoreClosedReceiver) : result;
   }
   const responses = connections.map((connection) => {
-    const response = requestReader(connection, message);
+    const response = requestExtensionPage(connection, message);
     return options.frameId == null ? response.catch(ignoreClosedReceiver) : response;
   });
   if (options.frameId == null) {
@@ -59,42 +73,55 @@ export function sendToTab(tabId, message, options = {}) {
   return Promise.all(responses).then((values) => values.find((value) => value != null) ?? null);
 }
 
-function requestReader(connection, message) {
+function requestExtensionPage(connection, message, timeout = 10000) {
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     // An unresponsive page must not leave a browser command pending indefinitely.
     const timer = setTimeout(() => {
       connection.pending.delete(id);
-      reject(new Error("Reader command timed out."));
-    }, 10000);
+      reject(new Error("Extension page command timed out."));
+    }, timeout);
     connection.pending.set(id, { resolve, reject, timer });
     connection.port.postMessage({ type: "request", id, message });
   });
 }
 
-export async function sendToReader(tabId, readerId, message) {
+export async function sendToExtensionPage(tabId, bridgeExtensionId, message, pageUrl, frameId) {
   const deadline = Date.now() + 10000;
+  let connected = false;
   while (Date.now() < deadline) {
-    const connections = [...ports.values()].filter(({ port, ready }) =>
-      ready && port.sender.tab.id === tabId && port.sender.id === readerId
+    let connections = [...ports.values()].filter(({ port, ready }) =>
+      ready && port.sender.tab.id === tabId && port.sender.id === bridgeExtensionId &&
+      (frameId == null || port.sender.frameId === frameId)
     );
-    if (connections.length > 1) {
-      throw new Error("More than one matching reader is open in this tab.");
+    if (connections.length) connected = true;
+    if (pageUrl) {
+      const urls = await Promise.all(
+        connections.map((connection) =>
+          requestExtensionPage(
+            connection,
+            { handler: "getPageUrl" },
+            Math.max(1, deadline - Date.now()),
+          )
+        ),
+      );
+      connections = connections.filter((_connection, index) =>
+        urls[index].split("#")[0] === pageUrl
+      );
     }
-    if (connections.length === 1) return await requestReader(connections[0], message);
+    if (connections.length > 1) {
+      throw new Error("More than one matching extension page is open in this tab.");
+    }
+    if (connections.length === 1) return await requestExtensionPage(connections[0], message);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error("Reader did not reconnect. Reload its tab.");
+  if (connected && pageUrl) {
+    throw new Error("The marked page is not open in this tab: " + pageUrl);
+  }
+  throw new Error("The extension page did not reconnect. Reload its tab.");
 }
 
 export const bridgeRequestHandlers = {
-  async hasMark(request) {
-    if (typeof request.key !== "string" || !request.key.startsWith("vimiumGlobalMark|")) {
-      throw new Error("Invalid mark key.");
-    }
-    return Object.hasOwn(await chrome.storage.local.get(request.key), request.key);
-  },
-
   async storage(request, sender) {
     // Bound shared storage use to 51 queries of at most 4096 UTF-16 code units each.
     const allowed = sender.tab.incognito
@@ -115,14 +142,18 @@ export const bridgeRequestHandlers = {
   },
 };
 
-export async function validateBridgeRequest(request, sender, backgroundCommands) {
-  if (!isBridgeSender(sender)) {
-    throw new Error("Add this reader's ID to Allowed bridge extensions in Vimium2 options.");
-  }
+export function validateBridgeRequest(request, sender, backgroundCommands) {
+  validateBridgeSender(sender);
   if (Object.hasOwn(bridgeRequestHandlers, request.handler)) return;
   if (!allowedHandlers.has(request.handler)) throw new Error("Unsupported bridge message.");
+  if (
+    request.handler === "sendMessageToFrames" &&
+    !["runInTopFrame", "focusFrame", "userIsInteractingWithThePage"].includes(
+      request.message?.handler,
+    )
+  ) throw new Error("Unsupported frame message.");
   const { count } = request;
-  // Reader scripts can request browser commands; cap repeated work at 100 operations.
+  // Extension pages can request browser commands; cap repeated work at 100 operations.
   if (count !== null && (!Number.isInteger(count) || count < 1 || count > 100)) {
     throw new Error("Bridge command count must be between 1 and 100.");
   }
@@ -133,32 +164,33 @@ export async function validateBridgeRequest(request, sender, backgroundCommands)
   if (
     request.handler === "runBackgroundCommand" && request.registryEntry.command === "createTab"
   ) {
-    const urls = request.urls ??
-      (request.url ? [request.url] : (await Promise.all(
-        Object.keys(request.registryEntry.options ?? {}).map(async (key) =>
-          await UrlUtils.isUrl(key) ? key : null
-        ),
-      )).filter(Boolean));
-    if (
-      !Array.isArray(urls) || urls.some((url) => typeof url !== "string") ||
-      Math.max(1, urls.length) * (count ?? 1) > 100
-    ) {
-      throw new Error("Reader requests can create at most 100 tabs.");
-    }
+    request.maxTabs = Math.floor(100 / (count ?? 1));
   }
   if (
     ["createMark", "gotoMark"].includes(request.handler) &&
     !/^[A-Z]$/.test(request.markName ?? "")
   ) {
-    throw new Error("Reader global marks must be uppercase letters.");
+    throw new Error("Global marks must be uppercase letters.");
   }
   if (request.handler.startsWith("openUrl") && typeof request.url !== "string") {
-    throw new Error("Reader URLs must be strings.");
+    throw new Error("URLs must be strings.");
+  }
+  if (request.pageUrl !== undefined) {
+    if (typeof request.pageUrl !== "string") {
+      throw new Error("Page URL must be a string.");
+    }
+    const url = new URL(request.pageUrl);
+    const isOwnPage = url.protocol === "chrome-extension:" && url.hostname === sender.id;
+    if (!["http:", "https:", "file:", "blob:"].includes(url.protocol) && !isOwnPage) {
+      throw new Error("Unsupported extension page URL.");
+    }
   }
 }
 
 export function filterBridgeResponse(request, result) {
-  return ["initializeFrame", "getCurrentTabUrl", "hasMark"].includes(request.handler)
+  return ["initializeFrame", "getCurrentTabUrl", "getBrowserInfo"].includes(
+      request.handler,
+    )
     ? result
     : null;
 }
@@ -167,7 +199,12 @@ export function initializeBridgeConnections(ready) {
   let revision = 0;
   const metadata = ready.then(async () => {
     if (globalThis.isUnitTests) return {};
-    const response = await fetch(chrome.runtime.getURL("bridge.json"));
+    let response;
+    try {
+      response = await fetch(chrome.runtime.getURL("bridge.json"));
+    } catch (cause) {
+      throw new Error("Rebuild Vimium2 before loading it.", { cause });
+    }
     if (!response.ok) throw new Error("Rebuild Vimium2 before loading it.");
     return await response.json();
   });
@@ -194,15 +231,14 @@ export function initializeBridgeConnections(ready) {
       ports.delete(port);
       for (const pending of connection.pending.values()) {
         clearTimeout(pending.timer);
-        pending.reject(new Error(error?.message ?? "Reader disconnected."));
+        pending.reject(new Error(error?.message ?? "Extension page disconnected."));
       }
       connection.pending.clear();
     });
     (async () => {
       const info = await metadata;
-      if (port.name !== "vimium2-bridge" || !isBridgeSender(port.sender)) {
-        throw new Error("Add this reader's ID to Allowed bridge extensions in Vimium2 options.");
-      }
+      if (port.name !== "vimium2-bridge") throw new Error("Unsupported bridge connection.");
+      validateBridgeSender(port.sender);
       if (closed) return;
       ports.set(port, connection);
       let storage, observed;
@@ -240,7 +276,7 @@ export function initializeBridgeConnections(ready) {
       if (!allowed) {
         port.postMessage({
           type: "error",
-          error: "This reader is no longer allowed to connect to Vimium2.",
+          error: "This extension is no longer allowed to connect to Vimium2.",
         });
         port.disconnect();
         ports.delete(port);

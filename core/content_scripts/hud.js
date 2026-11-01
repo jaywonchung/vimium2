@@ -6,6 +6,7 @@ const HUD = {
   tween: null,
   hudUI: null,
   findMode: null,
+  clipboardRequests: new Map(),
   abandon() {
     if (this.hudUI) {
       this.hudUI.hide(false);
@@ -26,6 +27,7 @@ const HUD = {
       search: this.search,
       unfocusIfFocused: this.unfocusIfFocused,
       pasteResponse: this.pasteResponse,
+      copyResponse: this.copyResponse,
       showClipboardUnavailableMessage: this.showClipboardUnavailableMessage,
     };
     const handler = handlers[data.name];
@@ -179,9 +181,31 @@ const HUD = {
   // * events.
   // * the HUD shouldn't be active for this frame while any of the copy/paste commands are running.
   async copyToClipboard(text) {
-    await DomUtils.documentComplete();
-    await this.init();
-    this.hudUI.postMessage({ name: "copyToClipboard", data: text });
+    try {
+      if (Backend.writeClipboard) {
+        await Backend.writeClipboard(text);
+      } else {
+        await DomUtils.documentComplete();
+        await this.init();
+        const id = crypto.randomUUID();
+        await new Promise((resolve, reject) => {
+          this.clipboardRequests.set(id, { resolve, reject });
+          this.hudUI.postMessage({ name: "copyToClipboard", id, data: text });
+        });
+      }
+      return true;
+    } catch (error) {
+      this.show(error.message, 3000);
+      return false;
+    }
+  },
+
+  copyResponse({ id, error }) {
+    const request = this.clipboardRequests.get(id);
+    if (!request) return;
+    this.clipboardRequests.delete(id);
+    if (error) request.reject(new Error(error));
+    else request.resolve();
   },
 
   async pasteFromClipboard(pasteListener) {

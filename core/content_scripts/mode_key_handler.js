@@ -17,6 +17,7 @@ class KeyHandlerMode extends Mode {
     this.reset();
   }
   setPassKeys(passKeys) {
+    if (this.passKeys === passKeys) return;
     this.passKeys = passKeys;
     this.reset();
   }

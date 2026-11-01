@@ -186,6 +186,10 @@ class UIComponent {
     if (!this.showing) return;
     this.showing = false;
     this.setIframeVisible(false);
+    if (document.activeElement === this.shadowDOM.host) {
+      this.shadowDOM.host.blur();
+      globalThis.focus();
+    }
     if (this.focusOptions.focus) {
       this.iframeElement.blur();
       if (shouldRefocusOriginalFrame) {

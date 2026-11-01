@@ -1,5 +1,5 @@
 import * as TabOperations from "./tab_operations.js";
-import { isBridgeSender, sendToReader, sendToTab } from "./bridge.js";
+import { sendToExtensionPage, sendToTab } from "./bridge.js";
 
 // This returns the key which is used for storing mark locations in chrome.storage.sync.
 // Exported for tests.
@@ -24,7 +24,8 @@ export async function create(req, sender) {
     tabId: sender.tab.id,
     scrollX: req.scrollX,
     scrollY: req.scrollY,
-    readerId: isBridgeSender(sender) ? sender.id : null,
+    bridgeExtensionId: req.bridgeExtensionId ?? null,
+    pageUrl: req.bridgeExtensionId ? getBaseUrl(req.pageUrl) : null,
   };
 
   if ((markInfo.scrollX != null) && (markInfo.scrollY != null)) {
@@ -54,7 +55,7 @@ export async function goto(req) {
   const key = getLocationKey(req.markName);
   const items = await chrome.storage.local.get(key);
   const markInfo = items[key];
-  if (!markInfo) throw new Error("Global mark is not set: " + req.markName);
+  if (!markInfo) throw new Error(`Global mark not set '${req.markName}'`);
   if (markInfo.vimiumSecret !== vimiumSecret) {
     // This is a different Vimium instantiation, so markInfo.tabId is definitely out of date.
     Utils.debugLog("marks: vimiumSecret is incorrect.");
@@ -80,11 +81,11 @@ export async function goto(req) {
 }
 
 // Focus an existing tab and scroll to the given position within it.
-async function gotoPositionInTab({ tabId, scrollX, scrollY, readerId }) {
+async function gotoPositionInTab({ tabId, scrollX, scrollY, bridgeExtensionId, pageUrl }) {
   const tab = await chrome.tabs.update(tabId, { active: true });
   chrome.windows.update(tab.windowId, { focused: true });
   const message = { handler: "setScrollPosition", scrollX, scrollY };
-  if (readerId) await sendToReader(tabId, readerId, message);
+  if (bridgeExtensionId) await sendToExtensionPage(tabId, bridgeExtensionId, message, pageUrl);
   else await sendToTab(tabId, message, { frameId: 0 });
 }
 
@@ -106,8 +107,24 @@ async function focusOrLaunch(markInfo, req) {
     const tab = await TabOperations.openUrlInNewTab(
       Object.assign(req, { url: getBaseUrl(markInfo.url) }),
     );
-    if (markInfo.readerId) await gotoPositionInTab({ ...markInfo, tabId: tab.id });
-    else tabLoadedHandlers[tab.id] = () => gotoPositionInTab({ ...markInfo, tabId: tab.id });
+    if (markInfo.bridgeExtensionId) await gotoPositionInTab({ ...markInfo, tabId: tab.id });
+    else {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          delete tabLoadedHandlers[tab.id];
+          reject(new Error("The marked page did not load. Reload its tab and try again."));
+        }, 10000);
+        tabLoadedHandlers[tab.id] = async () => {
+          clearTimeout(timer);
+          try {
+            await gotoPositionInTab({ ...markInfo, tabId: tab.id });
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        };
+      });
+    }
   }
 }
 

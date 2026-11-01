@@ -1,3 +1,5 @@
+import "../core/backend.js";
+import "../local_backend.js";
 import "../core/lib/utils.js";
 import "../core/lib/dom_utils.js";
 import "../core/lib/settings.js";

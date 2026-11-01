@@ -1,3 +1,5 @@
+import "../core/backend.js";
+import "../local_backend.js";
 //
 // This controls the contents of the Vomnibar iframe. We use an iframe to avoid changing the
 // selection on the page (useful for bookmarklets), ensure that the Vomnibar style is unaffected by
@@ -317,7 +319,7 @@ class VomnibarUI {
           this.hide(() => this.launchUrl(query, openInNewTab));
         } else {
           this.hide(() =>
-            chrome.runtime.sendMessage({
+            Backend.runtime.sendMessage({
               handler: "launchSearchQuery",
               query,
               openInNewTab,
@@ -330,11 +332,12 @@ class VomnibarUI {
       this.hide(() => this.launchUrl(query, openInNewTab));
     } else if (completion.command) {
       this.hide(async () => {
-        await chrome.runtime.sendMessage({
+        await Backend.runtime.sendMessage({
           handler: "runNormalModeCommand",
           command: completion.command.registryEntry,
           count: this.prefixCount,
           sourceFrameId: this.sourceFrameId,
+          sourceExtensionId: UIComponentMessenger.getOwnerExtensionId(),
         });
       });
     } else {
@@ -356,7 +359,7 @@ class VomnibarUI {
     const query = this.getInputValueAsQuery();
     const queryTerms = query.trim().split(/\s+/).filter((s) => s.length > 0);
 
-    const results = await chrome.runtime.sendMessage({
+    const results = await Backend.runtime.sendMessage({
       handler: "filterCompletions",
       completerName: this.completerName,
       queryTerms,
@@ -383,7 +386,7 @@ class VomnibarUI {
   }
 
   refreshCompletions() {
-    chrome.runtime.sendMessage({
+    Backend.runtime.sendMessage({
       handler: "refreshCompletions",
       completerName: this.completerName,
     });
@@ -392,7 +395,7 @@ class VomnibarUI {
   cancelCompletions() {
     // Let the background page's completer optionally abandon any pending query, because the user is
     // typing and another query will arrive soon.
-    chrome.runtime.sendMessage({
+    Backend.runtime.sendMessage({
       handler: "cancelCompletions",
       completerName: this.completerName,
     });
@@ -440,7 +443,7 @@ class VomnibarUI {
 
   openCompletion(completion, openInNewTab) {
     if (completion.description == "tab") {
-      chrome.runtime.sendMessage({ handler: "selectSpecificTab", id: completion.tabId });
+      Backend.runtime.sendMessage({ handler: "selectSpecificTab", id: completion.tabId });
     } else {
       this.launchUrl(completion.url, openInNewTab);
     }
@@ -452,7 +455,7 @@ class VomnibarUI {
     if (openInNewTab && UrlUtils.hasJavascriptProtocol(url)) {
       openInNewTab = false;
     }
-    await chrome.runtime.sendMessage({
+    await Backend.runtime.sendMessage({
       handler: openInNewTab ? "openUrlInNewTab" : "openUrlInCurrentTab",
       url,
     });

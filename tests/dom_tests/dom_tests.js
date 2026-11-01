@@ -1196,6 +1196,44 @@ context("Mode utilities", () => {
   });
 });
 
+context("Find result scrolling", () => {
+  teardown(() => {
+    getSelection().removeAllRanges();
+    Scroller.setScrollContainerSelector(null);
+    document.getElementById("test-div").innerHTML = "";
+    globalThis.scrollTo(0, 0);
+  });
+
+  for (const useContainer of [false, true]) {
+    should(`reveal a match inside a long paragraph with reader container ${useContainer}`, () => {
+      const fixture = document.getElementById("test-div");
+      const container = document.createElement("div");
+      container.id = "find-scroll-container";
+      if (useContainer) {
+        container.style.cssText = "height: 240px; overflow: auto; margin-top: 60px";
+      }
+      const paragraph = document.createElement("p");
+      paragraph.style.cssText = "white-space: pre; line-height: 24px";
+      const prefix = "Text before match\n".repeat(100);
+      paragraph.textContent = prefix + "Needle\n" + "Text after match\n".repeat(10);
+      container.append(paragraph);
+      fixture.append(container);
+      globalThis.scrollTo(0, 0);
+      if (useContainer) Scroller.setScrollContainerSelector("#find-scroll-container");
+
+      highlight(paragraph.firstChild, prefix.length, "Needle".length);
+
+      const selection = getSelection();
+      assert.equal("Needle", selection.toString());
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      const viewport = useContainer
+        ? container.getBoundingClientRect()
+        : { top: 0, bottom: innerHeight };
+      assert.isTrue(rect.top >= viewport.top && rect.bottom <= viewport.bottom);
+    });
+  }
+});
+
 context("PostFindMode", () => {
   let postFindMode;
 

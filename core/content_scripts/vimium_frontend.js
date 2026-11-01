@@ -276,13 +276,13 @@ const onUnload = Utils.makeIdempotent(() => {
 
 function setScrollPosition({ scrollX, scrollY }) {
   DomUtils.documentReady().then(() => {
-    if (!DomUtils.isTopFrame()) return;
+    if (!Backend.isPageRoot()) return;
     Utils.nextTick(function () {
       globalThis.focus();
       document.body.focus();
-      if ((scrollX > 0) || (scrollY > 0)) {
+      if ((scrollX >= 0) && (scrollY >= 0)) {
         Marks.setPreviousPosition();
-        globalThis.scrollTo(scrollX, scrollY);
+        Scroller.restoreScrollPosition({ scrollX, scrollY });
       }
     });
   });
@@ -362,8 +362,8 @@ const messageHandlers = {
     focusThisFrame(request);
   },
   getScrollPosition(_ignoredA, _ignoredB) {
-    if (DomUtils.isTopFrame()) {
-      return { scrollX: globalThis.scrollX, scrollY: globalThis.scrollY };
+    if (Backend.isPageRoot()) {
+      return Scroller.getScrollPosition();
     }
   },
   setScrollPosition,
@@ -371,7 +371,7 @@ const messageHandlers = {
   runInTopFrame({ sourceFrameId, registryEntry }) {
     // TODO(philc): it seems to me that we should be able to get rid of this runInTopFrame
     // command, and instead use chrome.tabs.sendMessage with a frameId 0 from the background page.
-    if (DomUtils.isTopFrame()) {
+    if (Backend.isPageRoot()) {
       return NormalModeCommands[registryEntry.command](sourceFrameId, registryEntry);
     }
   },

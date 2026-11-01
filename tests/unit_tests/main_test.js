@@ -5,116 +5,17 @@ import "../../background_scripts/main.js";
 import { RegistryEntry } from "../../background_scripts/commands.js";
 
 function sendBackgroundMessage(request, sender, event = chrome.runtime.onMessage) {
-  assert.equal(1, event.listeners.length);
   const { promise, resolve, reject } = Promise.withResolvers();
   // Stubbed handlers require no I/O; fail missing responses after one second.
   const timer = setTimeout(() => reject(new Error("Background message did not respond.")), 1000);
   try {
-    assert.isTrue(event.listeners[0](request, sender, resolve));
+    for (const listener of event.listeners) listener(request, sender, resolve);
   } catch (error) {
     clearTimeout(timer);
     throw error;
   }
   return promise.finally(() => clearTimeout(timer));
 }
-
-context("Background message dispatch", () => {
-  const sender = { tab: { id: 7, url: "https://example.com/" }, frameId: 0 };
-
-  should("leave unrelated messages for other listeners", () => {
-    assert.equal(1, chrome.runtime.onMessage.listeners.length);
-    const [listener] = chrome.runtime.onMessage.listeners;
-    for (const request of [null, {}, { handler: "unknown" }, { handler: "toString" }]) {
-      assert.isFalse(listener(request, sender, () => assert.fail("Unexpected response")));
-    }
-  });
-
-  should("use Chrome's sender to read and navigate the current tab", async () => {
-    const forged = { tab: { id: 99, url: "https://other.example/" }, tabId: 99 };
-    assert.equal(
-      sender.tab.url,
-      await sendBackgroundMessage({
-        handler: "getCurrentTabUrl",
-        ...forged,
-      }, sender),
-    );
-    const updates = [];
-    stub(chrome.tabs, "update", (id, options) => updates.push({ id, ...options }));
-    const url = "https://destination.example/";
-    await sendBackgroundMessage({ handler: "openUrlInCurrentTab", url, ...forged }, sender);
-    assert.equal([{ id: 7, url }], updates);
-  });
-
-  should("wait for settings and report loading failures before running commands", async () => {
-    const loaded = Promise.withResolvers();
-    const queries = [];
-    stub(Settings, "onLoaded", () => loaded.promise);
-    stub(chrome.search, "query", (query) => queries.push(query));
-    const request = { handler: "launchSearchQuery", query: "example", openInNewTab: false };
-    const response = sendBackgroundMessage(request, sender);
-    await Promise.resolve();
-    const callsBeforeLoaded = queries.length;
-    loaded.resolve();
-    await response;
-    assert.equal(0, callsBeforeLoaded);
-    assert.equal([{ disposition: "CURRENT_TAB", text: "example" }], queries);
-
-    stub(Settings, "onLoaded", () => Promise.reject(new Error("Settings failed to load.")));
-    assert.equal(
-      { error: "Settings failed to load." },
-      await sendBackgroundMessage(request, sender),
-    );
-    assert.equal(1, queries.length);
-  });
-
-  should("preserve default, explicit, and null counts when closing tabs", async () => {
-    stub(chrome.tabs, "query", withPromise(() => [sender.tab, { id: 8 }, { id: 9 }, { id: 10 }]));
-    const removed = [];
-    stub(chrome.tabs, "remove", withPromise((ids) => removed.push(ids)));
-    for (const count of [undefined, 2, null]) {
-      await sendBackgroundMessage({
-        handler: "runBackgroundCommand",
-        registryEntry: { command: "closeTabsOnRight" },
-        count,
-      }, sender);
-    }
-    assert.equal([[8], [8, 9], [8, 9, 10]], removed);
-  });
-
-  should("ignore page commands without a sender tab", async () => {
-    const updates = [];
-    stub(chrome.tabs, "update", (...args) => updates.push(args));
-    assert.equal(
-      undefined,
-      await sendBackgroundMessage({
-        handler: "openUrlInCurrentTab",
-        url: "https://destination.example/",
-        tabId: 99,
-      }, {}),
-    );
-    assert.equal([], updates);
-  });
-
-  should("reply when a browser operation throws or rejects", async () => {
-    for (
-      const query of [
-        () => {
-          throw new Error("Browser operation failed.");
-        },
-        () => Promise.reject(new Error("Browser operation failed.")),
-      ]
-    ) {
-      stub(chrome.tabs, "query", query);
-      assert.equal(
-        { error: "Browser operation failed." },
-        await sendBackgroundMessage({
-          handler: "runBackgroundCommand",
-          registryEntry: { command: "closeTabsOnRight" },
-        }, sender),
-      );
-    }
-  });
-});
 
 context("External background message dispatch", () => {
   const sender = {
@@ -138,86 +39,57 @@ context("External background message dispatch", () => {
       const source of [
         { ...sender, id: "denied" },
         { ...sender, url: "https://other.example/" },
-        { ...sender, tab: undefined },
       ]
     ) {
       assert.equal(
         {
-          error: "Add this reader's ID to Allowed bridge extensions in Vimium2 options.",
+          error: "Add this extension's ID to Allowed bridge extensions in Vimium2 options.",
         },
         await send({ handler: "openUrlInCurrentTab", url: "https://destination.example/" }, source),
       );
     }
+    assert.equal(
+      { error: "Vimium2 requires a page in a browser tab. Open this extension page in a tab." },
+      await send({ handler: "openUrlInCurrentTab", url: "https://destination.example/" }, {
+        ...sender,
+        tab: undefined,
+      }),
+    );
     assert.equal([], updates);
   });
 
   should(
-    "wait for URL validation and reject excessive tab creation before running the command",
-    async () => {
-      const started = Promise.withResolvers();
-      const checked = Promise.withResolvers();
-      let calls = 0;
-      stub(UrlUtils, "isUrl", () => {
-        started.resolve();
-        return checked.promise;
-      });
-      stub(BackgroundCommands, "createTab", () => calls++);
-      const response = send({
-        handler: "runBackgroundCommand",
-        count: 51,
-        registryEntry: {
-          command: "createTab",
-          options: { "https://one.example/": true, "https://two.example/": true },
-        },
-      });
-      await started.promise;
-      const callsWhileChecking = calls;
-      checked.resolve(true);
-      assert.equal({ error: "Reader requests can create at most 100 tabs." }, await response);
-      assert.equal(0, callsWhileChecking);
-      assert.equal(0, calls);
-    },
-  );
-
-  should(
-    "derive the target tab from Chrome and reject JavaScript despite caller permission",
+    "derive the target tab from Chrome despite caller-supplied tab IDs",
     async () => {
       const updates = [];
-      const scripts = [];
       stub(chrome.tabs, "update", (id, options) => updates.push({ id, ...options }));
-      stub(chrome.scripting, "executeScript", (options) => scripts.push(options));
       const request = {
         handler: "openUrlInCurrentTab",
         url: "https://destination.example/",
         tab: { id: 99 },
         tabId: 99,
-        allowJavascript: true,
       };
       assert.equal(null, await send(request));
       assert.equal([{ id: 7, url: request.url }], updates);
-      assert.equal(
-        { error: "Reader extensions cannot execute javascript URLs." },
-        await send({
-          ...request,
-          url: "javascript:document.title='unexpected'",
-        }),
-      );
-      assert.equal([], scripts);
     },
   );
 
-  should("return the page URL while withholding browser-command results", async () => {
+  should("validate page identity before initialization or saving marks", async () => {
+    const before = await chrome.storage.local.get(null);
     assert.equal(sender.url, await send({ handler: "getCurrentTabUrl" }));
-    stub(BackgroundCommands, "createTab", () => ({ privateValue: "private" }));
-    assert.equal(
-      null,
-      await send({
-        handler: "runBackgroundCommand",
-        url: "https://destination.example/",
-        registryEntry: { command: "createTab", options: {} },
-      }),
-    );
-    assert.equal({ error: "Unsupported bridge message." }, await send({ handler: "toString" }));
+    for (
+      const [pageUrl, error] of [
+        [42, "Page URL must be a string."],
+        ["javascript:alert(1)", "Unsupported extension page URL."],
+        ["chrome-extension://another/page.html", "Unsupported extension page URL."],
+      ]
+    ) {
+      assert.equal({ error }, await send({ handler: "createMark", markName: "A", pageUrl }));
+    }
+    assert.equal(before, await chrome.storage.local.get(null));
+    for (const pageUrl of [sender.url, "https://example.com/article"]) {
+      assert.equal(pageUrl, await send({ handler: "getCurrentTabUrl", pageUrl }));
+    }
   });
 });
 

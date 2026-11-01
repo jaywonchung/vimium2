@@ -93,11 +93,11 @@ const OPEN_WITH_QUEUE = {
 const COPY_LINK_URL = {
   name: "copy-link-url",
   indicator: "Copy link URL to Clipboard",
-  linkActivator(link) {
+  async linkActivator(link) {
     if (link.href != null) {
       let url = link.href;
       if (url.slice(0, 7) === "mailto:") url = url.slice(7);
-      if (HUD.copyToClipboard(url) === false) return;
+      if (await HUD.copyToClipboard(url) === false) return;
       if (28 < url.length) url = url.slice(0, 26) + "....";
       HUD.show(`Yanked ${url}`, 2000);
     } else {
@@ -120,10 +120,10 @@ const DOWNLOAD_LINK_URL = {
 const COPY_LINK_TEXT = {
   name: "copy-link-text",
   indicator: "Copy link text",
-  linkActivator(link) {
+  async linkActivator(link) {
     let text = link.textContent;
     if (text.length > 0) {
-      HUD.copyToClipboard(text);
+      if (await HUD.copyToClipboard(text) === false) return;
       if (28 < text.length) text = text.slice(0, 26) + "....";
       HUD.show(`Yanked ${text}`, 2000);
     } else {
@@ -1154,6 +1154,8 @@ const LocalHints = {
       }
     }
 
+    if (element.matches(":disabled")) return [];
+
     // Check aria properties to see if the element should be ignored.
     // Note that we're showing hints for elements with aria-hidden=true. See #3501 for discussion.
     const ariaDisabled = element.getAttribute("aria-disabled");
@@ -1316,6 +1318,7 @@ const LocalHints = {
     }
 
     if (isClickable) {
+      if (getComputedStyle(element).pointerEvents === "none") return [];
       // An image map has multiple clickable areas, and so can represent multiple LocalHints.
       if (imageMapAreas.length > 0) {
         const mapHints = imageMapAreas.map((areaAndRect) => {

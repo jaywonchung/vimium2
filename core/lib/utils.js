@@ -12,61 +12,6 @@ if (globalThis.forTrusted == null) {
   };
 }
 
-// Firefox does not have the storage.session API as of 2023-05-20. Until it does, use storage.local.
-// Firefox 115 has beta support for storage.session, but this storage is not exposed to content
-// scripts unless we use `setAccessLevel`, and that API is not yet implemented in Firefox 115.
-// NOTE: In UI page iframes (HUD, Vomnibar), Backend may not be configured yet. The guard in
-// backend.js handles this by auto-configuring from chrome if available.
-if (typeof Backend === "undefined") {
-  // Load backend.js inline for contexts where it wasn't loaded as a separate script.
-  const _hasChrome = typeof chrome !== "undefined" && chrome.runtime;
-  const _noopStorage = {
-    get() {
-      return Promise.resolve({});
-    },
-    async set() {},
-    async remove() {},
-    async clear() {},
-    setAccessLevel() {},
-  };
-  globalThis.Backend = {
-    runtime: {
-      sendMessage: _hasChrome
-        ? function (m, c) {
-          if (c) {
-            chrome.runtime.sendMessage(m, c);
-            return;
-          }
-          return chrome.runtime.sendMessage(m);
-        }
-        : null,
-      onMessage: _hasChrome ? chrome.runtime.onMessage : { addListener() {}, removeListener() {} },
-      getURL: _hasChrome ? (p) => chrome.runtime.getURL(p) : () => "",
-      getManifest: _hasChrome ? () => chrome.runtime.getManifest() : () => ({}),
-    },
-    storage: _hasChrome
-      ? {
-        sync: chrome.storage.sync,
-        session: chrome.storage.session,
-        local: chrome.storage.local,
-        onChanged: chrome.storage.onChanged,
-      }
-      : {
-        sync: { ..._noopStorage },
-        session: { ..._noopStorage },
-        local: { ..._noopStorage },
-        onChanged: { addListener() {} },
-      },
-    isAlive: () => true,
-    isIncognito: _hasChrome ? () => !!chrome.extension?.inIncognitoContext : () => false,
-  };
-}
-if (Backend.storage.session == null || Backend.storage.session.setAccessLevel == null) {
-  Backend.storage.session = Backend.storage.local;
-  // Polyfill Backend.storage.session.setAccessLevel.
-  Backend.storage.session.setAccessLevel = function () {};
-}
-
 const Utils = {
   debug: false,
 

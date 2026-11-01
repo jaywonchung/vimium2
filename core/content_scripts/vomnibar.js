@@ -53,7 +53,7 @@ const Vomnibar = {
     this.open(sourceFrameId, {
       completer: "omni",
       selectFirst: false,
-      query: globalThis.location.href,
+      query: Backend.getPageUrl(),
     });
   },
 
@@ -61,7 +61,7 @@ const Vomnibar = {
     this.open(sourceFrameId, {
       completer: "omni",
       selectFirst: false,
-      query: globalThis.location.href,
+      query: Backend.getPageUrl(),
       newTab: true,
     });
   },

@@ -30,7 +30,9 @@ export async function bridgeFingerprint() {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function buildBridge() {
+// Optional provider source must define createPageUrlProvider(), returning a page URL getter.
+// It runs in the target extension and may initialize asynchronously.
+export async function buildBridge({ pageUrlProvider } = {}) {
   const manifest = JSON5.parse(
     await Deno.readTextFile(path.join(root, "manifest.json")),
   );
@@ -56,6 +58,13 @@ export async function buildBridge() {
   const config = {
     fingerprint: ${JSON.stringify(await bridgeFingerprint())},
     vimiumId: document.currentScript.dataset.vimiumId,
+    scrollContainer: document.currentScript.dataset.vimiumScrollContainer,
+    navigateInTab: document.currentScript.dataset.vimiumNavigateInTab === "true",
+    onConnected() {
+      state.state = "ready";
+      delete state.error;
+      document.getElementById("vimium2-error")?.remove();
+    },
     onError(error) {
       state.state = "error";
       state.error = error.message;
@@ -82,7 +91,16 @@ export async function buildBridge() {
   };
 ${backend}
 ${remote}
+${pageUrlProvider ?? ""}
   async function start() {
+${
+    pageUrlProvider === undefined ? "" : `
+    config.getPageUrl = await createPageUrlProvider();
+    if (typeof config.getPageUrl !== "function") {
+      throw new Error("Page URL provider must return a function.");
+    }
+`
+  }
     const remote = initRemoteBackend(config);
     await remote.attach();
     remote.configureBackend();
@@ -90,7 +108,16 @@ ${remote}
     style.textContent = ${JSON.stringify(css + "\n" + bridgeCss)};
     document.head.appendChild(style);
 ${core.join("\n")}
-    await remote.applyPostLoadPatches();
+    await Settings.onLoaded();
+    const userStyle = document.createElement("style");
+    document.head.appendChild(userStyle);
+    const updateStyle = () => {
+      userStyle.textContent = Settings.get("userDefinedLinkHintCss");
+    };
+    updateStyle();
+    Settings.addEventListener("change", updateStyle);
+    if (config.scrollContainer) Scroller.setScrollContainerSelector(config.scrollContainer);
+    remote.coreLoaded();
     state.state = "ready";
   }
   const run = () => start().catch(config.onError);

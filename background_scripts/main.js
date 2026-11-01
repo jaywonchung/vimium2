@@ -1,3 +1,5 @@
+import "../core/backend.js";
+import "../local_backend.js";
 import "../core/lib/utils.js";
 import "../core/lib/settings.js";
 import "../core/lib/url_utils.js";
@@ -15,7 +17,7 @@ import {
   bridgeRequestHandlers,
   filterBridgeResponse,
   initializeBridgeConnections,
-  isBridgeSender,
+  sendToExtensionPage,
   sendToTab,
   validateBridgeRequest,
 } from "./bridge.js";
@@ -279,6 +281,11 @@ const BackgroundCommands = {
         }
       }
     }
+    if (
+      request.maxTabs != null &&
+      (!Array.isArray(request.urls) || request.urls.some((url) => typeof url !== "string") ||
+        request.urls.length > request.maxTabs)
+    ) throw new Error("Extension requests can create at most 100 tabs.");
     if (request.registryEntry.options.incognito || request.registryEntry.options.window) {
       // Firefox does not allow an incognito window to be created with the URL about:newtab. It
       // throws this error: "Illegal URL: about:newtab".
@@ -522,9 +529,12 @@ async function getFrameIdsForTab(tabId) {
 const HintCoordinator = {
   // Forward the message in "request" to all frames the in sender's tab.
   broadcastLinkHintsMessage(request, sender) {
-    sendToTab(
+    return sendToTab(
       sender.tab.id,
       Object.assign(request, { handler: "linkHintsMessage" }),
+      request.frameScope != null
+        ? { frameId: request.frameScope }
+        : { includeExtensionPages: false },
     );
   },
 
@@ -533,8 +543,9 @@ const HintCoordinator = {
     tabId,
     originatingFrameId,
     { modeIndex, requestedByHelpDialog, isExtensionPage },
+    frameIds,
   ) {
-    const frameIds = await getFrameIdsForTab(tabId);
+    frameIds ??= await getFrameIdsForTab(tabId);
     // If link hints was triggered on a Vimium extension page (like the vimium help dialog or
     // options page), we cannot directly retrieve the frameIds for those pages using the
     // getFrameIdsForTab. However, as a workaround, if those pages were the pages activating hints,
@@ -617,12 +628,21 @@ const sendRequestHandlers = {
     if (!Number.isInteger(request.sourceFrameId) || request.sourceFrameId < 0) {
       throw new Error("Command selection requires its source frame.");
     }
+    if (request.sourceExtensionId) {
+      return sendToExtensionPage(
+        sender.tab.id,
+        request.sourceExtensionId,
+        request,
+        undefined,
+        request.sourceFrameId,
+      );
+    }
     return sendToTab(sender.tab.id, request, { frameId: request.sourceFrameId });
   },
   // getCurrentTabUrl is used by the content scripts to get their full URL, because window.location
   // cannot help with Chrome-specific URLs like "view-source:http:..".
-  getCurrentTabUrl({ tab }) {
-    return tab.url;
+  getCurrentTabUrl(request) {
+    return request.pageUrl;
   },
   openUrlInNewTab: createRepeatCommand(async (request, callback) => {
     await TabOperations.openUrlInNewTab(request, callback);
@@ -650,12 +670,12 @@ const sendRequestHandlers = {
   },
 
   domReady(_, sender) {
-    const isTopFrame = sender.frameId == 0 || isBridgeSender(sender);
-    if (!isTopFrame) return;
+    if (sender.frameId != 0) return;
     const tabId = sender.tab.id;
     // The only feature that uses tabLoadedHandlers is marks.
-    if (tabLoadedHandlers[tabId]) tabLoadedHandlers[tabId]();
+    const onLoaded = tabLoadedHandlers[tabId];
     delete tabLoadedHandlers[tabId];
+    return onLoaded?.();
   },
 
   nextFrame: BackgroundCommands.nextFrame,
@@ -666,20 +686,30 @@ const sendRequestHandlers = {
   // messages to only the frame with that ID.
   sendMessageToFrames(request, sender) {
     const newRequest = Object.assign({}, request.message);
-    const options = request.frameId != null ? { frameId: request.frameId } : {};
-    sendToTab(sender.tab.id, newRequest, options);
+    const options = request.frameScope != null
+      ? { frameId: request.frameScope }
+      : newRequest.handler === "runInTopFrame"
+      ? { frameId: 0 }
+      : request.frameId != null
+      ? { frameId: request.frameId }
+      : {};
+    return sendToTab(sender.tab.id, newRequest, options);
   },
   broadcastLinkHintsMessage(request, sender) {
-    HintCoordinator.broadcastLinkHintsMessage(request, sender);
+    return HintCoordinator.broadcastLinkHintsMessage(request, sender);
   },
   prepareToActivateLinkHintsMode(request, sender) {
-    HintCoordinator.prepareToActivateLinkHintsMode(sender.tab.id, sender.frameId, request);
+    return HintCoordinator.prepareToActivateLinkHintsMode(
+      sender.tab.id,
+      sender.frameId,
+      request,
+      request.frameScope != null ? [request.frameScope] : undefined,
+    );
   },
 
-  async initializeFrame(_request, sender) {
-    // Check whether the extension is enabled for the top frame's URL, rather than the URL of the
-    // specific frame that sent this request.
-    const enabledState = exclusions.isEnabledForUrl(sender.tab.url);
+  async initializeFrame(request, sender) {
+    // Apply exclusions to the extension page's effective URL or the website's top-frame URL.
+    const enabledState = exclusions.isEnabledForUrl(request.pageUrl);
 
     const isTopFrame = sender.frameId == 0;
     if (isTopFrame) {
@@ -774,6 +804,12 @@ function createMessageListener({ handlers, externalPolicy = null }) {
       count: message.count === undefined ? 1 : message.count,
       tab: sender.tab == null ? undefined : { ...sender.tab },
       tabId: sender.tab?.id,
+      pageUrl: externalPolicy
+        ? (message.pageUrl === undefined ? sender.url : message.pageUrl)
+        : sender.tab?.url,
+      bridgeExtensionId: externalPolicy ? sender.id : null,
+      frameScope: externalPolicy ? sender.frameId : null,
+      maxTabs: null,
       allowJavascript: externalPolicy ? false : message.allowJavascript,
     };
     if (externalPolicy) await externalPolicy.validate(request, sender);

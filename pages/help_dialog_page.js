@@ -54,7 +54,7 @@ const HelpDialogPage = {
     for (const eventName of ["click", "auxclick"]) {
       optionsLink.addEventListener(eventName, (event) => {
         event.preventDefault();
-        chrome.runtime.sendMessage({ handler: "openOptionsPageInNewTab" });
+        Backend.runtime.sendMessage({ handler: "openOptionsPageInNewTab" });
       }, false);
     }
 

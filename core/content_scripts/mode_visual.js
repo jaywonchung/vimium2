@@ -410,14 +410,14 @@ class VisualMode extends KeyHandlerMode {
     }
     this.yankedText = this.selection.toString();
     this.exit();
-    if (HUD.copyToClipboard(this.yankedText) === false) return this.yankedText;
-
-    let message = this.yankedText.replace(/\s+/g, " ");
-    if (15 < this.yankedText.length) {
-      message = message.slice(0, 12) + "...";
-    }
-    const plural = this.yankedText.length === 1 ? "" : "s";
-    HUD.show(`Yanked ${this.yankedText.length} character${plural}: \"${message}\".`, 2500);
+    const text = this.yankedText;
+    (async () => {
+      if (await HUD.copyToClipboard(text) === false) return;
+      let message = text.replace(/\s+/g, " ");
+      if (15 < text.length) message = message.slice(0, 12) + "...";
+      const plural = text.length === 1 ? "" : "s";
+      HUD.show(`Yanked ${text.length} character${plural}: \"${message}\".`, 2500);
+    })();
 
     return this.yankedText;
   }

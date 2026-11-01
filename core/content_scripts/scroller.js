@@ -2,13 +2,22 @@
 // mostly for input elements. This mechanism allows us to decide whether to scroll a div or to
 // scroll the whole document.
 let activatedElement = null;
+let configuredScrollSelector = null;
 
 // Previously, the main scrolling element was document.body. If the "experimental web platform
 // features" flag is enabled, then we need to use document.scrollingElement instead. There's an
 // explanation in #2168: https://github.com/philc/vimium/pull/2168#issuecomment-236488091
 
-const getScrollingElement = () =>
-  getSpecialScrollingElement() || document.scrollingElement || document.body;
+const getScrollingElement = () => {
+  if (configuredScrollSelector) {
+    const element = document.querySelector(configuredScrollSelector);
+    if (!element) {
+      throw new Error("Configured scroll container is missing: " + configuredScrollSelector);
+    }
+    return element;
+  }
+  return getSpecialScrollingElement() || document.scrollingElement || document.body;
+};
 
 // Return 0, -1 or 1: the sign of the argument.
 // NOTE(smblott; 2014/12/17) We would like to use Math.sign(). However, according to this site
@@ -51,7 +60,7 @@ const getDimension = function (el, direction, amount) {
     const name = amount;
     // the clientSizes of the body are the dimensions of the entire page, but the viewport should
     // only be the part visible through the window
-    if ((name === "viewSize") && (el === getScrollingElement())) {
+    if ((name === "viewSize") && !configuredScrollSelector && (el === getScrollingElement())) {
       // TODO(smblott) Should we not be returning the width/height of element, here?
       return (direction === "x") ? globalThis.innerWidth : globalThis.innerHeight;
     } else {
@@ -334,6 +343,34 @@ const CoreScroller = {
 
 // Scroller contains the two main scroll functions which are used by clients.
 const Scroller = {
+  setScrollContainerSelector(selector) {
+    configuredScrollSelector = selector;
+    activatedElement = null;
+  },
+
+  getViewportRect() {
+    const rect = configuredScrollSelector ? getScrollingElement().getBoundingClientRect() : null;
+    return {
+      top: Math.max(0, rect?.top ?? 0),
+      left: Math.max(0, rect?.left ?? 0),
+      bottom: Math.min(innerHeight, rect?.bottom ?? innerHeight),
+      right: Math.min(innerWidth, rect?.right ?? innerWidth),
+    };
+  },
+
+  getScrollPosition() {
+    const element = configuredScrollSelector ? getScrollingElement() : null;
+    return {
+      scrollX: element ? element.scrollLeft : globalThis.scrollX,
+      scrollY: element ? element.scrollTop : globalThis.scrollY,
+    };
+  },
+
+  restoreScrollPosition({ scrollX, scrollY }) {
+    const element = configuredScrollSelector ? getScrollingElement() : globalThis;
+    element.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
+  },
+
   init() {
     const handler = { _name: "scroller/active-element" };
     // Only Chrome has a DOMActivate event. On Firefox, we must listen for click. See #3287.
@@ -360,6 +397,7 @@ const Scroller = {
   // :factor is needed because :amount can take on string values, which scrollBy converts to element
   // dimensions.
   scrollBy(direction, amount, factor, continuous) {
+    if (activatedElement && !activatedElement.isConnected) activatedElement = null;
     // if this is called before domReady, just use the window scroll function
     if (factor == null) {
       factor = 1;
@@ -394,6 +432,7 @@ const Scroller = {
   },
 
   scrollTo(direction, pos) {
+    if (activatedElement && !activatedElement.isConnected) activatedElement = null;
     if (!activatedElement) {
       activatedElement = (getScrollingElement() && firstScrollableElement()) ||
         getScrollingElement();
