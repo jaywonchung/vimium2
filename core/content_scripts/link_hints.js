@@ -97,7 +97,7 @@ const COPY_LINK_URL = {
     if (link.href != null) {
       let url = link.href;
       if (url.slice(0, 7) === "mailto:") url = url.slice(7);
-      HUD.copyToClipboard(url);
+      if (HUD.copyToClipboard(url) === false) return;
       if (28 < url.length) url = url.slice(0, 26) + "....";
       HUD.show(`Yanked ${url}`, 2000);
     } else {
@@ -109,7 +109,7 @@ const OPEN_INCOGNITO = {
   name: "open-incognito",
   indicator: "Open link in incognito window",
   linkActivator(link) {
-    chrome.runtime.sendMessage({ handler: "openUrlInIncognito", url: link.href });
+    Backend.runtime.sendMessage({ handler: "openUrlInIncognito", url: link.href });
   },
 };
 const DOWNLOAD_LINK_URL = {
@@ -181,7 +181,7 @@ const HintCoordinator = {
   sendMessage(messageType, request) {
     if (request == null) request = {};
     request = Object.assign(request, { messageType, handler: "broadcastLinkHintsMessage" });
-    chrome.runtime.sendMessage(request);
+    Backend.runtime.sendMessage(request);
   },
 
   prepareToActivateMode(mode, onExit) {
@@ -208,7 +208,7 @@ const HintCoordinator = {
     const protocol = globalThis.location.protocol;
     // chrome-extension, moz-extension (Firefox), extension (Edge).
     const isExtensionPage = protocol.endsWith("extension:");
-    chrome.runtime.sendMessage({
+    Backend.runtime.sendMessage({
       handler: "prepareToActivateLinkHintsMode",
       modeIndex: availableModes.indexOf(mode),
       isExtensionPage,

@@ -410,7 +410,7 @@ class VisualMode extends KeyHandlerMode {
     }
     this.yankedText = this.selection.toString();
     this.exit();
-    HUD.copyToClipboard(this.yankedText);
+    if (HUD.copyToClipboard(this.yankedText) === false) return this.yankedText;
 
     let message = this.yankedText.replace(/\s+/g, " ");
     if (15 < this.yankedText.length) {
@@ -467,10 +467,10 @@ VisualMode.prototype.movements = {
     return this.yank();
   },
   "p"() {
-    return chrome.runtime.sendMessage({ handler: "openUrlInCurrentTab", url: this.yank() });
+    return Backend.runtime.sendMessage({ handler: "openUrlInCurrentTab", url: this.yank() });
   },
   "P"() {
-    return chrome.runtime.sendMessage({ handler: "openUrlInNewTab", url: this.yank() });
+    return Backend.runtime.sendMessage({ handler: "openUrlInNewTab", url: this.yank() });
   },
   "v"() {
     return new VisualMode().init();

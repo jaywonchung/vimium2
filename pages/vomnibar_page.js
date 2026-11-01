@@ -47,6 +47,7 @@ export async function activate(options) {
   ui.setForceNewTab(options.newTab);
   ui.setQuery(options.query);
   ui.setPrefixCount(options.prefixCount);
+  ui.sourceFrameId = options.sourceFrameId;
   ui.setActiveUserSearchEngine(userSearchEngines.keywordToEngine[options.keyword]);
   // Use await here for vomnibar_test.js, so that this page doesn't get unloaded while a test is
   // running.
@@ -333,6 +334,7 @@ class VomnibarUI {
           handler: "runNormalModeCommand",
           command: completion.command.registryEntry,
           count: this.prefixCount,
+          sourceFrameId: this.sourceFrameId,
         });
       });
     } else {

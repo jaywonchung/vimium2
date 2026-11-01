@@ -12,12 +12,12 @@ class NormalMode extends KeyHandlerMode {
 
     super.init(Object.assign(defaults, options));
 
-    chrome.storage.session.get(
+    Backend.storage.session.get(
       "normalModeKeyStateMapping",
       (items) => this.setKeyMapping(items.normalModeKeyStateMapping),
     );
 
-    chrome.storage.onChanged.addListener((changes, area) => {
+    Backend.storage.onChanged.addListener((changes, area) => {
       if (area === "session" && changes.normalModeKeyStateMapping?.newValue) {
         this.setKeyMapping(changes.normalModeKeyStateMapping.newValue);
       }
@@ -63,12 +63,12 @@ class NormalMode extends KeyHandlerMode {
       // We never return to a UI-component frame (e.g. the help dialog), it might have lost the
       // focus.
       const sourceFrameId = globalThis.isVimiumUIComponent ? 0 : frameId;
-      chrome.runtime.sendMessage({
+      Backend.runtime.sendMessage({
         handler: "sendMessageToFrames",
         message: { handler: "runInTopFrame", sourceFrameId, registryEntry },
       });
     } else if (registryEntry.background) {
-      chrome.runtime.sendMessage({ handler: "runBackgroundCommand", registryEntry, count });
+      Backend.runtime.sendMessage({ handler: "runBackgroundCommand", registryEntry, count });
     } else {
       const commandFn = NormalModeCommands[registryEntry.command];
       commandFn(count, { registryEntry });
@@ -164,19 +164,19 @@ const NormalModeCommands = {
   },
 
   toggleViewSource() {
-    chrome.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
+    Backend.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
       if (url.substr(0, 12) === "view-source:") {
         url = url.substr(12, url.length - 12);
       } else {
         url = "view-source:" + url;
       }
-      chrome.runtime.sendMessage({ handler: "openUrlInNewTab", url });
+      Backend.runtime.sendMessage({ handler: "openUrlInNewTab", url });
     });
   },
 
   copyCurrentUrl() {
-    chrome.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
-      HUD.copyToClipboard(url);
+    Backend.runtime.sendMessage({ handler: "getCurrentTabUrl" }, function (url) {
+      if (HUD.copyToClipboard(url) === false) return;
       // This length is determined empirically based on a 350px width of the HUD. An alternate
       // solution is to have the HUD ellipsize based on its width.
       const maxLength = 40;
@@ -189,7 +189,7 @@ const NormalModeCommands = {
 
   openCopiedUrlInNewTab(count, request) {
     HUD.pasteFromClipboard((url) =>
-      chrome.runtime.sendMessage({
+      Backend.runtime.sendMessage({
         handler: "openUrlInNewTab",
         position: request.registryEntry.options.position,
         url,
@@ -200,7 +200,7 @@ const NormalModeCommands = {
 
   openCopiedUrlInCurrentTab() {
     HUD.pasteFromClipboard((url) =>
-      chrome.runtime.sendMessage({ handler: "openUrlInCurrentTab", url })
+      Backend.runtime.sendMessage({ handler: "openUrlInCurrentTab", url })
     );
   },
 

@@ -13,6 +13,9 @@ export async function openUrlInCurrentTab(request, sender) {
     // The requested destination is not a URL, so treat it like a search query.
     chrome.search.query({ text: request.url });
   } else if (UrlUtils.hasJavascriptProtocol(urlStr)) {
+    if (request.allowJavascript === false) {
+      throw new Error("Reader extensions cannot execute javascript URLs.");
+    }
     // javascript: URLs, i.e. "bookmarklets", are always run against the tab's top-level frame.
 
     // Since we're using chrome.scripting.executeScript to execute the javascript, assert that the

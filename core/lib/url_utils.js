@@ -26,7 +26,7 @@ const UrlUtils = {
     if (inUnitTests) {
       text = await Deno.readTextFile(path);
     } else {
-      const response = await fetch(chrome.runtime.getURL(path));
+      const response = await fetch(Backend.runtime.getURL(path));
       text = await response.text();
     }
     this.tlds = new Set(text.split("\n"));

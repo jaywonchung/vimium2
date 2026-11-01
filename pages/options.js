@@ -24,6 +24,7 @@ const options = {
   smoothScroll: "boolean",
   userDefinedLinkHintCss: "string",
   waitForEnterForFilteredHints: "boolean",
+  allowedBridgeExtensions: "csv",
 };
 
 export async function init() {
@@ -132,6 +133,9 @@ function setFormFromSettings(settings) {
         optionEl.checked = true;
         break;
       }
+      case "csv":
+        el.value = Array.isArray(value) ? value.join(", ") : "";
+        break;
       default:
         throw new Error(`Unrecognized option type ${optionType}`);
     }
@@ -164,6 +168,9 @@ function getSettingsFromForm() {
         value = optionEl.value;
         break;
       }
+      case "csv":
+        value = el.value.trim() ? el.value.split(",").map((s) => s.trim()).filter(Boolean) : [];
+        break;
       default:
         throw new Error(`Unrecognized option type ${optionType}`);
     }
@@ -181,6 +188,13 @@ function getSettingsFromForm() {
 function getValidationErrors() {
   const results = {};
   let text, parsed;
+
+  const bridgeIds = getOptionEl("allowedBridgeExtensions").value.split(",").map((id) => id.trim())
+    .filter(Boolean);
+  if (bridgeIds.some((id) => !/^[a-p]{32}$/.test(id))) {
+    results.allowedBridgeExtensions =
+      "Use 32-character extension IDs from chrome://extensions, separated by commas.";
+  }
 
   // keyMappings field.
   text = getOptionEl("keyMappings").value.trim();

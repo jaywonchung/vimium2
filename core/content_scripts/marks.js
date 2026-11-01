@@ -70,7 +70,7 @@ const Marks = {
               if (DomUtils.isTopFrame()) {
                 [scrollX, scrollY] = [globalThis.scrollX, globalThis.scrollY];
               }
-              chrome.runtime.sendMessage({
+              Backend.runtime.sendMessage({
                 handler: "createMark",
                 markName: keyChar,
                 scrollX,
@@ -102,9 +102,9 @@ const Marks = {
             if (this.isGlobalMark(event, keyChar)) {
               // This key must match @getLocationKey() in the back end.
               const key = `vimiumGlobalMark|${keyChar}`;
-              chrome.storage.local.get(key, function (items) {
+              Backend.storage.local.get(key, function (items) {
                 if (key in items) {
-                  chrome.runtime.sendMessage({ handler: "gotoMark", markName: keyChar });
+                  Backend.runtime.sendMessage({ handler: "gotoMark", markName: keyChar });
                   HUD.show(`Jumped to global mark '${keyChar}'`, 1000);
                 } else {
                   HUD.show(`Global mark not set '${keyChar}'`, 1000);

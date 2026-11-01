@@ -5,6 +5,7 @@ import * as fs from "@std/fs";
 import * as path from "@std/path";
 import { abort, desc, run, task } from "drake";
 import puppeteer from "puppeteer";
+import { bridgeFingerprint } from "./bridge/build.js";
 // We use a vendored version of shoulda, rather than jsr:@philc/shoulda, because shoulda.js is used
 // in dom_tests.js which is loaded by Puppeteer, which doesn't have access to Deno's module system.
 import * as shoulda from "./tests/vendor/shoulda.js";
@@ -227,6 +228,10 @@ async function buildStorePackage() {
     "dist/firefox",
   ]);
   await shell("rsync", rsyncOptions);
+  await Deno.writeTextFile(
+    "dist/vimium/bridge.json",
+    JSON.stringify({ fingerprint: await bridgeFingerprint() }) + "\n",
+  );
 
   await checkFilesFromManifestArePresent(chromeManifest);
 

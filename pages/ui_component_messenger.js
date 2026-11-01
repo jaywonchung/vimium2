@@ -11,11 +11,15 @@ export async function registerPortWithOwnerPage(event) {
   // fetched from session storage, so if it matches, then we know that event.ports came from the
   // Vimium extension.
   const secret = (await chrome.storage.session.get("vimiumSecret")).vimiumSecret;
-  if (event.data !== secret) {
+  const { allowedBridgeExtensions = [] } = await chrome.storage.sync.get("allowedBridgeExtensions");
+  const bridgeOrigin = /^chrome-extension:\/\/([a-p]{32})$/.exec(event.origin);
+  const allowedBridge = bridgeOrigin && allowedBridgeExtensions.includes(bridgeOrigin[1]);
+  if (!(secret && event.data === secret) && !allowedBridge) {
     Utils.debugLog("ui_component_messenger.js: vimiumSecret is incorrect.");
     return;
   }
-  openPort(event.ports[0]);
+  if (event.ports.length !== 1) return;
+  openPort(event.ports[0], allowedBridge ? bridgeOrigin[1] : null);
   // Once we complete a handshake with the parent page hosting this page's iframe, stop listening
   // for messages on the window object.
   globalThis.removeEventListener("message", registerPortWithOwnerPage);
@@ -31,9 +35,32 @@ export function init() {
   globalThis.addEventListener("message", registerPortWithOwnerPage);
 }
 
-function openPort(port) {
+function openPort(port, bridgeId) {
   ownerPagePort = port;
+  const revoke = () => {
+    ownerPagePort?.close();
+    ownerPagePort = null;
+    handleMessage = null;
+    globalThis.location.replace("about:blank");
+  };
+  if (bridgeId) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (
+        area === "sync" && changes.allowedBridgeExtensions &&
+        !changes.allowedBridgeExtensions.newValue?.includes(bridgeId)
+      ) revoke();
+    });
+  }
   ownerPagePort.onmessage = async (event) => {
+    if (bridgeId) {
+      const { allowedBridgeExtensions = [] } = await chrome.storage.sync.get(
+        "allowedBridgeExtensions",
+      );
+      if (!allowedBridgeExtensions.includes(bridgeId)) {
+        revoke();
+        return;
+      }
+    }
     if (handleMessage) {
       return await handleMessage(event);
     }

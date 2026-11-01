@@ -1,13 +1,15 @@
 // This // implements find-mode query history as a list of raw queries, most recent first.
 // This is under core/lib/ since it is used by both content scripts and iframes from pages/.
 const FindModeHistory = {
-  storage: chrome.storage.session,
+  get storage() {
+    return Backend.storage.session;
+  },
   key: "findModeRawQueryList",
   max: 50,
   rawQueryList: null,
 
   async init() {
-    this.isIncognitoMode = chrome.extension.inIncognitoContext;
+    this.isIncognitoMode = Backend.isIncognito();
 
     if (!this.rawQueryList) {
       if (this.isIncognitoMode) this.key = "findModeRawQueryListIncognito";
@@ -24,7 +26,7 @@ const FindModeHistory = {
       }
     }
 
-    chrome.storage.onChanged.addListener((changes, _area) => {
+    Backend.storage.onChanged.addListener((changes, _area) => {
       if (changes[this.key]) {
         this.rawQueryList = changes[this.key].newValue;
       }

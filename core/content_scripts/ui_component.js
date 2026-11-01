@@ -49,7 +49,7 @@ class UIComponent {
 
     // Fetch "core/content_scripts/vimium.css" from chrome.storage.session; the background page caches
     // it there.
-    chrome.storage.session.get("vimiumCSSInChromeStorage")
+    Backend.storage.session.get("vimiumCSSInChromeStorage")
       .then((items) => styleSheet.innerHTML = items.vimiumCSSInChromeStorage);
 
     this.iframeElement.className = className;
@@ -72,19 +72,19 @@ class UIComponent {
     });
 
     this.setIframeVisible(false);
-    this.iframeElement.src = chrome.runtime.getURL(iframeUrl);
+    this.iframeElement.src = Backend.runtime.getURL(iframeUrl);
     await DomUtils.documentReady();
     this.handleDarkReaderFilter();
     document.documentElement.appendChild(shadowWrapper);
 
-    const secret = (await chrome.storage.session.get("vimiumSecret")).vimiumSecret;
+    const secret = (await Backend.storage.session.get("vimiumSecret")).vimiumSecret;
     const { port1, port2 } = new MessageChannel();
     this.messageChannelPorts = [port1, port2];
     this.iframeElement.addEventListener("load", () => {
       // Get vimiumSecret so the iframe can determine that our message isn't the page
       // impersonating us.
       // Outside of tests, target origin starts with chrome-extension://{vimium's-id}
-      const targetOrigin = isDomTests ? "*" : chrome.runtime.getURL("");
+      const targetOrigin = isDomTests ? "*" : Backend.runtime.getURL("");
       this.iframeElement.contentWindow.postMessage(secret, targetOrigin, [port2]);
       port1.onmessage = (event) => {
         let eventName = null;
@@ -119,7 +119,7 @@ class UIComponent {
             this.messageHandler?.(event);
         }
       };
-    });
+    }, { once: true });
   }
 
   // This ensures that Vimium's UI elements (HUD, Vomnibar) honor the browser's light/dark theme
@@ -190,7 +190,7 @@ class UIComponent {
       this.iframeElement.blur();
       if (shouldRefocusOriginalFrame) {
         if (this.focusOptions.sourceFrameId != null) {
-          chrome.runtime.sendMessage({
+          Backend.runtime.sendMessage({
             handler: "sendMessageToFrames",
             frameId: this.focusOptions.sourceFrameId,
             message: {

@@ -80,6 +80,7 @@ w: https://www.wikipedia.org/w/index.php?title=Special:Search&search=%s Wikipedi
   waitForEnterForFilteredHints: true,
   helpDialog_showAdvancedCommands: false,
   ignoreKeyboardLayout: false,
+  allowedBridgeExtensions: [],
 };
 
 /*
@@ -117,12 +118,12 @@ const Settings = {
     // the new schema.
     if (!this._chromeStorageListenerInstalled) {
       this._chromeStorageListenerInstalled = true;
-      chrome.storage.onChanged.addListener((changes, area) =>
+      Backend.storage.onChanged.addListener((changes, area) =>
         this.chromeStorageOnChanged(changes, area)
       );
     }
 
-    let result = await chrome.storage.sync.get(null); // Get every key.
+    let result = await Backend.storage.sync.get(null); // Get every key.
     result = this.migrateSettingsIfNecessary(result);
     result["settingsVersion"] = Utils.getCurrentVersion();
     this._settings = Object.assign(globalThis.structuredClone(defaultOptions), result);
@@ -246,8 +247,8 @@ const Settings = {
     // value in chrome-storage has a maximum size.
     const resultKeys = Object.keys(result);
     const removedKeys = Object.keys(settings).filter((key) => !resultKeys.includes(key));
-    await chrome.storage.sync.remove(removedKeys);
-    await chrome.storage.sync.set(result);
+    await Backend.storage.sync.remove(removedKeys);
+    await Backend.storage.sync.set(result);
     await this.load();
   },
 
@@ -266,7 +267,7 @@ const Settings = {
   // Used only by tests.
   async clear() {
     this._settings = null;
-    await chrome.storage.sync.clear();
+    await Backend.storage.sync.clear();
   },
 };
 

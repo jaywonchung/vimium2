@@ -1,3 +1,4 @@
+import "../../core/backend.js";
 import * as shoulda from "../vendor/shoulda.js";
 import * as jsdom from "jsdom";
 import "./test_chrome_stubs.js";

@@ -53,7 +53,7 @@ class GrabBackFocus extends Mode {
     const exitEventHandler = () => {
       return this.alwaysContinueBubbling(() => {
         this.exit();
-        chrome.runtime.sendMessage({
+        Backend.runtime.sendMessage({
           handler: "sendMessageToFrames",
           message: { handler: "userIsInteractingWithThePage" },
         });
@@ -92,10 +92,10 @@ class GrabBackFocus extends Mode {
     // This mode is active in all frames. A user might have begun interacting with one frame without
     // other frames detecting this. When one GrabBackFocus mode exits, we broadcast a message to
     // inform all GrabBackFocus modes that they should exit; see #2296.
-    chrome.runtime.onMessage.addListener(
+    Backend.runtime.onMessage.addListener(
       listener = ({ name }) => {
         if (name === "userIsInteractingWithThePage") {
-          chrome.runtime.onMessage.removeListener(listener);
+          Backend.runtime.onMessage.removeListener(listener);
           if (this.modeIsActive) {
             this.exit();
           }
@@ -198,7 +198,7 @@ const checkEnabledAfterURLChange = forTrusted(function (_request) {
 // become orphaned: they remain running but cannot communicate with the background page or invoke
 // most extension APIs. There is no Chrome API to be notified of this event, so we test for it every
 // time a keystroke is pressed before we act on that keystroke. https://stackoverflow.com/a/64407849
-const extensionHasBeenUnloaded = () => chrome.runtime?.id == null;
+const extensionHasBeenUnloaded = () => !Backend.isAlive();
 
 // Wrapper to install event listeners.  Syntactic sugar.
 function installListener(element, event, callback) {
@@ -252,7 +252,7 @@ globalThis.addEventListener("hashchange", checkEnabledAfterURLChange, true);
 
 async function initializeOnDomReady() {
   // Tell the background page we're in the domReady state.
-  await chrome.runtime.sendMessage({ handler: "domReady" });
+  await Backend.runtime.sendMessage({ handler: "domReady" });
 
   const isVimiumNewTabPage = document.location.href == Settings.vimiumNewTabPageUrl;
   if (!isVimiumNewTabPage) return;
@@ -299,7 +299,7 @@ const flashFrame = (() => {
 
       // Inject stylesheet.
       const styleEl = DomUtils.createElement("style");
-      const vimiumCssUrl = chrome.runtime.getURL("core/content_scripts/vimium.css");
+      const vimiumCssUrl = Backend.runtime.getURL("core/content_scripts/vimium.css");
       styleEl.textContent = `@import url("${vimiumCssUrl}");`;
       shadowDOM.appendChild(styleEl);
 
@@ -427,7 +427,7 @@ async function initializePreDomReady() {
 // Check if Vimium should be enabled or not based on the top frame's URL.
 async function checkIfEnabledForUrl() {
   const promises = [];
-  promises.push(chrome.runtime.sendMessage({ handler: "initializeFrame" }));
+  promises.push(Backend.runtime.sendMessage({ handler: "initializeFrame" }));
   if (!Settings.isLoaded()) {
     promises.push(Settings.onLoaded());
   }

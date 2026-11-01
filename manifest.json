@@ -45,6 +45,8 @@
         "<all_urls>"
       ],
       "js": [
+        "core/backend.js",
+        "local_backend.js",
         "core/lib/types.js",
         "core/lib/utils.js",
         "core/lib/keyboard_utils.js",
@@ -120,7 +122,9 @@
       ],
       "matches": [
         "<all_urls>"
-      ]
+      ],
+      // Allow bridge extensions to access CSS and UI resources.
+      "extension_ids": ["*"]
     }
   ]
 }

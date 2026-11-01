@@ -273,11 +273,12 @@ class FindMode extends Mode {
 
   // Returns null if no search has been performed yet.
   static getQuery(backwards) {
-    if (!this.query) return;
     // check if the query has been changed by a script in another frame
     const mostRecentQuery = FindModeHistory.getQuery();
-    if (mostRecentQuery !== this.query.rawQuery) {
+    if (!mostRecentQuery) return;
+    if (!this.query || mostRecentQuery !== this.query.rawQuery) {
       this.updateQuery(mostRecentQuery);
+      return backwards ? this.getNextQueryFromRegexMatches(true) : this.getQueryFromRegexMatches();
     }
 
     return this.getNextQueryFromRegexMatches(backwards);

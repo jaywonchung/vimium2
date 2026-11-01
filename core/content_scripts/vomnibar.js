@@ -86,7 +86,7 @@ const Vomnibar = {
     HelpDialog.abort();
     Utils.assertType(VomnibarShowOptions, vomnibarShowOptions);
     this.vomnibarUI.show(
-      Object.assign(vomnibarShowOptions, { name: "activate" }),
+      Object.assign(vomnibarShowOptions, { name: "activate", sourceFrameId }),
       { sourceFrameId, focus: true },
     );
   },

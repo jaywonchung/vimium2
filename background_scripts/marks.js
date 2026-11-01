@@ -1,4 +1,5 @@
 import * as TabOperations from "./tab_operations.js";
+import { isBridgeSender, sendToReader, sendToTab } from "./bridge.js";
 
 // This returns the key which is used for storing mark locations in chrome.storage.sync.
 // Exported for tests.
@@ -23,23 +24,25 @@ export async function create(req, sender) {
     tabId: sender.tab.id,
     scrollX: req.scrollX,
     scrollY: req.scrollY,
+    readerId: isBridgeSender(sender) ? sender.id : null,
   };
 
   if ((markInfo.scrollX != null) && (markInfo.scrollY != null)) {
-    saveMark(markInfo);
+    await saveMark(markInfo);
   } else {
     // The front-end frame hasn't provided the scroll position (because it's not the top frame
     // within its tab). We need to ask the top frame what its scroll position is.
-    chrome.tabs.sendMessage(sender.tab.id, { handler: "getScrollPosition" }, (response) => {
-      saveMark(Object.assign(markInfo, { scrollX: response.scrollX, scrollY: response.scrollY }));
+    const position = await sendToTab(sender.tab.id, { handler: "getScrollPosition" }, {
+      frameId: 0,
     });
+    await saveMark(Object.assign(markInfo, position));
   }
 }
 
-function saveMark(markInfo) {
+async function saveMark(markInfo) {
   const item = {};
   item[getLocationKey(markInfo.markName)] = markInfo;
-  chrome.storage.local.set(item);
+  await chrome.storage.local.set(item);
 }
 
 // Goto a global mark. We try to find the original tab. If we can't find that, then we try to find
@@ -51,6 +54,7 @@ export async function goto(req) {
   const key = getLocationKey(req.markName);
   const items = await chrome.storage.local.get(key);
   const markInfo = items[key];
+  if (!markInfo) throw new Error("Global mark is not set: " + req.markName);
   if (markInfo.vimiumSecret !== vimiumSecret) {
     // This is a different Vimium instantiation, so markInfo.tabId is definitely out of date.
     Utils.debugLog("marks: vimiumSecret is incorrect.");
@@ -76,10 +80,12 @@ export async function goto(req) {
 }
 
 // Focus an existing tab and scroll to the given position within it.
-async function gotoPositionInTab({ tabId, scrollX, scrollY }) {
+async function gotoPositionInTab({ tabId, scrollX, scrollY, readerId }) {
   const tab = await chrome.tabs.update(tabId, { active: true });
   chrome.windows.update(tab.windowId, { focused: true });
-  chrome.tabs.sendMessage(tabId, { handler: "setScrollPosition", scrollX, scrollY });
+  const message = { handler: "setScrollPosition", scrollX, scrollY };
+  if (readerId) await sendToReader(tabId, readerId, message);
+  else await sendToTab(tabId, message, { frameId: 0 });
 }
 
 // The tab we're trying to find no longer exists. We either find another tab with a matching URL and
@@ -94,18 +100,14 @@ async function focusOrLaunch(markInfo, req) {
   if (tabs.length > 0) {
     // There is at least one matching tab. Pick one and go to it.
     const tab = await pickTab(tabs);
-    gotoPositionInTab(Object.assign(markInfo, { tabId: tab.id }));
+    await gotoPositionInTab(Object.assign(markInfo, { tabId: tab.id }));
   } else {
     // There is no existing matching tab. We'll have to create one.
-    TabOperations.openUrlInNewTab(
+    const tab = await TabOperations.openUrlInNewTab(
       Object.assign(req, { url: getBaseUrl(markInfo.url) }),
-      (tab) => {
-        // Note. tabLoadedHandlers is defined in "main.js". The handler below will be called when
-        // the tab is loaded, its DOM is ready and it registers with the background page.
-        return tabLoadedHandlers[tab.id] = () =>
-          gotoPositionInTab(Object.assign(markInfo, { tabId: tab.id }));
-      },
     );
+    if (markInfo.readerId) await gotoPositionInTab({ ...markInfo, tabId: tab.id });
+    else tabLoadedHandlers[tab.id] = () => gotoPositionInTab({ ...markInfo, tabId: tab.id });
   }
 }
 

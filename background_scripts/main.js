@@ -11,6 +11,14 @@ import "../background_scripts/completion/search_wrapper.js";
 import "../background_scripts/completion/completers.js";
 import "../background_scripts/tab_operations.js";
 import * as marks from "../background_scripts/marks.js";
+import {
+  bridgeRequestHandlers,
+  filterBridgeResponse,
+  initializeBridgeConnections,
+  isBridgeSender,
+  sendToTab,
+  validateBridgeRequest,
+} from "./bridge.js";
 
 import {
   BookmarkCompleter,
@@ -36,11 +44,14 @@ chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONT
 // This is exported for use by "marks.js".
 globalThis.tabLoadedHandlers = {}; // tabId -> function()
 
-// A Vimium secret, available only within the current browser session. The secret is a generated
-// strong random string.
-const randomArray = globalThis.crypto.getRandomValues(new Uint8Array(32)); // 32-byte random token.
-const secretToken = randomArray.reduce((a, b) => a.toString(16) + b.toString(16));
-chrome.storage.session.set({ vimiumSecret: secretToken });
+// UI iframes and global marks use one secret throughout the browser session.
+const secretReady = (async () => {
+  const { vimiumSecret } = await chrome.storage.session.get("vimiumSecret");
+  if (vimiumSecret) return;
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  await chrome.storage.session.set({ vimiumSecret: token });
+})();
 
 const completionSources = {
   bookmarks: new BookmarkCompleter(),
@@ -80,7 +91,7 @@ function onURLChange(details) {
     handler: "checkEnabledAfterURLChange",
     silenceLogging: true,
   };
-  chrome.tabs.sendMessage(details.tabId, message, { frameId: details.frameId })
+  sendToTab(details.tabId, message, { frameId: details.frameId })
     .catch(() => {});
 }
 
@@ -90,17 +101,12 @@ function onURLChange(details) {
 chrome.webNavigation.onHistoryStateUpdated.addListener(onURLChange); // history.pushState.
 chrome.webNavigation.onReferenceFragmentUpdated.addListener(onURLChange); // Hash changed.
 
-if (!globalThis.isUnitTests) {
-  // Cache "core/content_scripts/vimium.css" in chrome.storage.session for UI components.
-  (function () {
-    const url = chrome.runtime.getURL("core/content_scripts/vimium.css");
-    fetch(url).then(async (response) => {
-      if (response.ok) {
-        chrome.storage.session.set({ vimiumCSSInChromeStorage: await response.text() });
-      }
-    });
-  })();
-}
+const cssReady = (async () => {
+  if (globalThis.isUnitTests) return;
+  const response = await fetch(chrome.runtime.getURL("core/content_scripts/vimium.css"));
+  if (!response.ok) throw new Error("Cannot load Vimium2 stylesheet.");
+  await chrome.storage.session.set({ vimiumCSSInChromeStorage: await response.text() });
+})();
 
 function muteTab(tab) {
   chrome.tabs.update(tab.id, { muted: !tab.mutedInfo.muted });
@@ -120,7 +126,7 @@ function toggleMuteTab(request, sender) {
       }
       const audibleUnmutedTabs = tabs.filter((t) => t.audible && !t.mutedInfo.muted);
       if (audibleUnmutedTabs.length >= 0) {
-        chrome.tabs.sendMessage(tabId, {
+        sendToTab(tabId, {
           frameId: sender.frameId,
           handler: "showMessage",
           message: `Muting ${audibleUnmutedTabs.length} tab(s).`,
@@ -129,7 +135,7 @@ function toggleMuteTab(request, sender) {
           muteTab(tab);
         }
       } else {
-        chrome.tabs.sendMessage(tabId, {
+        sendToTab(tabId, {
           frameId: sender.frameId,
           handler: "showMessage",
           message: "Unmuting all muted tabs.",
@@ -143,13 +149,13 @@ function toggleMuteTab(request, sender) {
     });
   } else {
     if (currentTab.mutedInfo.muted) {
-      chrome.tabs.sendMessage(tabId, {
+      sendToTab(tabId, {
         frameId: sender.frameId,
         handler: "showMessage",
         message: "Unmuted tab.",
       });
     } else {
-      chrome.tabs.sendMessage(tabId, {
+      sendToTab(tabId, {
         frameId: sender.frameId,
         handler: "showMessage",
         message: "Muted tab.",
@@ -375,7 +381,7 @@ const BackgroundCommands = {
       // It is possible that this sendMessage call fails, if a frame gets unloaded while the request
       // is in flight.
       let isError = false;
-      const status = await (chrome.tabs.sendMessage(tabId, { handler: "getFocusStatus" }, {
+      const status = await (sendToTab(tabId, { handler: "getFocusStatus" }, {
         frameId: frameId,
       }).catch((_) => {
         isError = true;
@@ -397,7 +403,7 @@ const BackgroundCommands = {
     count = count ?? 1;
     const nextIndex = (index + count) % frameIds.length;
     if (index == nextIndex) return;
-    await chrome.tabs.sendMessage(tabId, { handler: "focusFrame", highlight: true }, {
+    await sendToTab(tabId, { handler: "focusFrame", highlight: true }, {
       frameId: frameIds[nextIndex],
     });
   },
@@ -516,7 +522,7 @@ async function getFrameIdsForTab(tabId) {
 const HintCoordinator = {
   // Forward the message in "request" to all frames the in sender's tab.
   broadcastLinkHintsMessage(request, sender) {
-    chrome.tabs.sendMessage(
+    sendToTab(
       sender.tab.id,
       Object.assign(request, { handler: "linkHintsMessage" }),
     );
@@ -538,7 +544,7 @@ const HintCoordinator = {
     }
     const timeout = 3000;
     let promises = frameIds.map(async (frameId) => {
-      let promise = chrome.tabs.sendMessage(
+      let promise = sendToTab(
         tabId,
         {
           handler: "linkHintsMessage",
@@ -574,7 +580,7 @@ const HintCoordinator = {
       // busy sites like Reddit.
       const outgoingFrameIdToHintDescriptors = Object.assign({}, frameIdToDescriptors);
       delete outgoingFrameIdToHintDescriptors[frameId];
-      return chrome.tabs.sendMessage(
+      return sendToTab(
         tabId,
         {
           handler: "linkHintsMessage",
@@ -608,7 +614,10 @@ const sendRequestHandlers = {
   // Used by the Vomnibar's command completer, which can be used to execute any command in Vimium.
   // The "request" must contain a "count" and a valid "command: RegistryEntry" parameter.
   runNormalModeCommand(request, sender) {
-    chrome.tabs.sendMessage(sender.tab.id, request);
+    if (!Number.isInteger(request.sourceFrameId) || request.sourceFrameId < 0) {
+      throw new Error("Command selection requires its source frame.");
+    }
+    return sendToTab(sender.tab.id, request, { frameId: request.sourceFrameId });
   },
   // getCurrentTabUrl is used by the content scripts to get their full URL, because window.location
   // cannot help with Chrome-specific URLs like "view-source:http:..".
@@ -641,7 +650,7 @@ const sendRequestHandlers = {
   },
 
   domReady(_, sender) {
-    const isTopFrame = sender.frameId == 0;
+    const isTopFrame = sender.frameId == 0 || isBridgeSender(sender);
     if (!isTopFrame) return;
     const tabId = sender.tab.id;
     // The only feature that uses tabLoadedHandlers is marks.
@@ -658,7 +667,7 @@ const sendRequestHandlers = {
   sendMessageToFrames(request, sender) {
     const newRequest = Object.assign({}, request.message);
     const options = request.frameId != null ? { frameId: request.frameId } : {};
-    chrome.tabs.sendMessage(sender.tab.id, newRequest, options);
+    sendToTab(sender.tab.id, newRequest, options);
   },
   broadcastLinkHintsMessage(request, sender) {
     HintCoordinator.broadcastLinkHintsMessage(request, sender);
@@ -750,32 +759,58 @@ const sendRequestHandlers = {
   },
 };
 
-Utils.addChromeRuntimeOnMessageListener(
-  Object.keys(sendRequestHandlers),
-  async function (request, sender) {
+// Creates a listener for Chrome's internal or external runtime message event.
+// External callers require a policy that validates requests and filters responses.
+function createMessageListener({ handlers, externalPolicy = null }) {
+  async function dispatch(message, sender) {
+    // Some browser lifecycle messages have no tab and cannot run page commands.
+    if (!externalPolicy && sender.tab == null) return;
+    await Settings.onLoaded();
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      throw new Error("Invalid message.");
+    }
+    const request = {
+      ...message,
+      count: message.count === undefined ? 1 : message.count,
+      tab: sender.tab == null ? undefined : { ...sender.tab },
+      tabId: sender.tab?.id,
+      allowJavascript: externalPolicy ? false : message.allowJavascript,
+    };
+    if (externalPolicy) await externalPolicy.validate(request, sender);
+    if (!Object.hasOwn(handlers, request.handler)) {
+      throw new Error("Unsupported message handler.");
+    }
     Utils.debugLog(
       "main.js: onMessage:%ourl:%otab:%oframe:%o",
       request.handler,
-      sender.url.replace(/https?:\/\//, ""),
+      sender.url?.replace(/https?:\/\//, ""),
       sender.tab?.id,
       sender.frameId,
-      // request // Often useful for debugging.
     );
-    // NOTE(philc): We expect all messages to come from a content script in a tab. I've observed in
-    // Firefox when the extension is first installed, domReady and initializeFrame messages come from
-    // content scripts in about:blank URLs, which have a null sender.tab. I don't know what this
-    // corresponds to. Since we expect a valid sender.tab, ignore those messages.
-    if (sender.tab == null) return;
-    await Settings.onLoaded();
-    request = Object.assign({ count: 1 }, request, {
-      tab: sender.tab,
-      tabId: sender.tab.id,
-    });
-    const handler = sendRequestHandlers[request.handler];
-    const result = handler ? await handler(request, sender) : null;
-    return result;
+    const result = await handlers[request.handler](request, sender);
+    return externalPolicy ? externalPolicy.filterResponse(request, result) : result;
+  }
+
+  return (message, sender, respond) => {
+    // Other listeners in the same extension can own messages outside this handler table.
+    if (!externalPolicy && !Object.hasOwn(handlers, message?.handler)) return false;
+    dispatch(message, sender).then(
+      respond,
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
+    );
+    return true;
+  };
+}
+
+const messageHandlers = { ...sendRequestHandlers, ...bridgeRequestHandlers };
+chrome.runtime.onMessage.addListener(createMessageListener({ handlers: messageHandlers }));
+chrome.runtime.onMessageExternal.addListener(createMessageListener({
+  handlers: messageHandlers,
+  externalPolicy: {
+    validate: (request, sender) => validateBridgeRequest(request, sender, BackgroundCommands),
+    filterResponse: filterBridgeResponse,
   },
-);
+}));
 
 // Remove chrome.storage.local/findModeRawQueryListIncognito if there are no remaining
 // incognito-mode windows. Since the common case is that there are none to begin with, we first
@@ -939,4 +974,5 @@ Object.assign(globalThis, {
 
 // The chrome.runtime.onStartup and onInstalled events are not fired when disabling and then
 // re-enabling the extension in developer mode, so we also initialize the extension here.
-initializeExtension();
+const extensionReady = initializeExtension();
+initializeBridgeConnections(Promise.all([extensionReady, secretReady, cssReady]));

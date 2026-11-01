@@ -15,10 +15,56 @@ if (globalThis.forTrusted == null) {
 // Firefox does not have the storage.session API as of 2023-05-20. Until it does, use storage.local.
 // Firefox 115 has beta support for storage.session, but this storage is not exposed to content
 // scripts unless we use `setAccessLevel`, and that API is not yet implemented in Firefox 115.
-if (chrome.storage.session == null || chrome.storage.session.setAccessLevel == null) {
-  chrome.storage.session = chrome.storage.local;
-  // Polyfill chrome.storage.session.setAccessLevel.
-  chrome.storage.session.setAccessLevel = function () {};
+// NOTE: In UI page iframes (HUD, Vomnibar), Backend may not be configured yet. The guard in
+// backend.js handles this by auto-configuring from chrome if available.
+if (typeof Backend === "undefined") {
+  // Load backend.js inline for contexts where it wasn't loaded as a separate script.
+  const _hasChrome = typeof chrome !== "undefined" && chrome.runtime;
+  const _noopStorage = {
+    get() {
+      return Promise.resolve({});
+    },
+    async set() {},
+    async remove() {},
+    async clear() {},
+    setAccessLevel() {},
+  };
+  globalThis.Backend = {
+    runtime: {
+      sendMessage: _hasChrome
+        ? function (m, c) {
+          if (c) {
+            chrome.runtime.sendMessage(m, c);
+            return;
+          }
+          return chrome.runtime.sendMessage(m);
+        }
+        : null,
+      onMessage: _hasChrome ? chrome.runtime.onMessage : { addListener() {}, removeListener() {} },
+      getURL: _hasChrome ? (p) => chrome.runtime.getURL(p) : () => "",
+      getManifest: _hasChrome ? () => chrome.runtime.getManifest() : () => ({}),
+    },
+    storage: _hasChrome
+      ? {
+        sync: chrome.storage.sync,
+        session: chrome.storage.session,
+        local: chrome.storage.local,
+        onChanged: chrome.storage.onChanged,
+      }
+      : {
+        sync: { ..._noopStorage },
+        session: { ..._noopStorage },
+        local: { ..._noopStorage },
+        onChanged: { addListener() {} },
+      },
+    isAlive: () => true,
+    isIncognito: _hasChrome ? () => !!chrome.extension?.inIncognitoContext : () => false,
+  };
+}
+if (Backend.storage.session == null || Backend.storage.session.setAccessLevel == null) {
+  Backend.storage.session = Backend.storage.local;
+  // Polyfill Backend.storage.session.setAccessLevel.
+  Backend.storage.session.setAccessLevel = function () {};
 }
 
 const Utils = {
@@ -52,12 +98,12 @@ const Utils = {
   },
 
   getCurrentVersion() {
-    return chrome.runtime.getManifest().version;
+    return Backend.runtime.getManifest().version;
   },
 
   async populateBrowserInfo() {
     if (this._browserInfoLoaded) return;
-    const result = await chrome.runtime.sendMessage({ handler: "getBrowserInfo" });
+    const result = await Backend.runtime.sendMessage({ handler: "getBrowserInfo" });
     this._isFirefox = result.isFirefox;
     this._firefoxVersion = result.firefoxVersion;
     this._browserInfoLoaded = true;
@@ -228,9 +274,9 @@ const Utils = {
   },
 
   monitorChromeSessionStorage(key, setter) {
-    return chrome.storage.session.get(key, (obj) => {
+    return Backend.storage.session.get(key, (obj) => {
       if (obj[key] != null) setter(obj[key]);
-      return chrome.storage.onChanged.addListener((changes, _area) => {
+      return Backend.storage.onChanged.addListener((changes, _area) => {
         if (changes[key] && (changes[key].newValue !== undefined)) {
           return setter(changes[key].newValue);
         }
@@ -263,7 +309,7 @@ const Utils = {
   //   page, or the Help dialog), then both listeners will receive all message types, and so each
   //   message handler must be able to distinguish which message types to respond to.
   addChromeRuntimeOnMessageListener(requestsHandled, listenerFn) {
-    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    Backend.runtime.onMessage.addListener((request, sender, sendResponse) => {
       Utils.assert(request.handler != null, "Request is missing handler", request);
       if (!requestsHandled.includes(request.handler)) {
         return false; // Signal that we will not handle this message.

@@ -1,6 +1,9 @@
 {
   "fmt": {
-    "exclude": ["icons/*.svg", "**/*.html"],
+    "exclude": [
+      "icons/*.svg",
+      "**/*.html"
+    ],
     "lineWidth": 100
   },
   "imports": {
@@ -11,6 +14,14 @@
     "drake": "https://deno.land/x/drake@v1.5.1/mod.ts",
     "jsdom": "npm:jsdom@^26.0.0",
     "json5": "npm:json5@^2.2.3",
-    "puppeteer": "npm:puppeteer@^25.3.0"
+    "puppeteer": "npm:puppeteer@24.39.1",
+    "fflate": "npm:fflate@0.8.2"
+  },
+  "tasks": {
+    "build": "deno run -A scripts/build.js",
+    "test:unit": "deno run -A make.js test-unit",
+    "test:dom": "deno run -A make.js test-dom",
+    "test:bridge": "deno test -A tests/bridge_test.js",
+    "test:bridge-browser": "deno run -A tests/e2e/bridge.js"
   }
 }

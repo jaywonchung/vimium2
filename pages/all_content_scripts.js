@@ -2,6 +2,8 @@
 // imported by background pages that we want to work with Vimium's key mappings, e.g. the options
 // page. This should be the same list of files as in manifest.js's content_scripts section.
 
+import "../core/backend.js";
+import "../local_backend.js";
 import "../core/lib/types.js";
 import "../core/lib/utils.js";
 import "../core/lib/url_utils.js";

@@ -80,4 +80,29 @@ if (shouldInstallStubs) {
       },
     },
   };
+
+  // Set up Backend singleton for DOM tests.
+  globalThis.Backend = {
+    ...globalThis.Backend,
+    runtime: {
+      sendMessage(msg, callback) {
+        if (callback) {
+          chrome.runtime.sendMessage(msg, callback);
+          return;
+        }
+        return chrome.runtime.sendMessage(msg);
+      },
+      onMessage: chrome.runtime.onMessage,
+      getURL: (path) => chrome.runtime.getURL(path),
+      getManifest: () => chrome.runtime.getManifest(),
+    },
+    storage: {
+      sync: chrome.storage.sync,
+      session: chrome.storage.session,
+      local: chrome.storage.local,
+      onChanged: chrome.storage.onChanged,
+    },
+    isAlive: () => true,
+    isIncognito: () => false,
+  };
 }

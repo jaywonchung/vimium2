@@ -13,4 +13,6 @@ globalThis.VomnibarShowOptions = {
   keyword: "string",
   // The count typed before launching command mode, used to repeat the selected command.
   prefixCount: "number",
+  // The frame which receives commands selected in the Vomnibar.
+  sourceFrameId: "number",
 };

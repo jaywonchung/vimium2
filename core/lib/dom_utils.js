@@ -402,7 +402,7 @@ const DomUtils = {
 
     if (newTabModifier) {
       // Open in new tab. Shift determines whether the tab is focused when created. Alt is ignored.
-      chrome.runtime.sendMessage({
+      Backend.runtime.sendMessage({
         handler: "openUrlInNewTab",
         url: element.href,
         active: shiftKey === true,
@@ -411,9 +411,9 @@ const DomUtils = {
       (shiftKey === true) && (metaKey === false) && (ctrlKey === false) && (altKey === false)
     ) {
       // Open in new window.
-      chrome.runtime.sendMessage({ handler: "openUrlInNewWindow", url: element.href });
+      Backend.runtime.sendMessage({ handler: "openUrlInNewWindow", url: element.href });
     } else if (element.target === "_blank") {
-      chrome.runtime.sendMessage({ handler: "openUrlInNewTab", url: element.href, active: true });
+      Backend.runtime.sendMessage({ handler: "openUrlInNewTab", url: element.href, active: true });
     }
   },
 
