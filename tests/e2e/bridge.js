@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import * as path from "node:path";
 import { parseArgs } from "node:util";
 import puppeteer from "puppeteer";
-import { bridgeFingerprint } from "../../bridge/build.js";
 import { patchExtension } from "../../patcher/patch.js";
+import { testRecoveryNotice } from "./recovery.js";
 import { resumeWorkerDebugger, stopWorker } from "./worker.js";
 
 const { values } = parseArgs({
@@ -107,14 +107,12 @@ try {
     path.join(source, "probe.html"),
     "<!doctype html><title>Probe</title>",
   );
-  await patchExtension({
+  const patched = await patchExtension({
     profile: { pages: [{ html: "page.html" }, { html: "nested/page.html" }] },
     source,
     output: extension,
     vimiumId,
   });
-  const bundle = await Deno.readTextFile(path.join(extension, "vimium2/bridge-0.js"));
-  const patchedHtml = await Deno.readTextFile(path.join(extension, "page.html"));
   const extensionId = await browser.installExtension(extension);
   const page = await browser.newPage();
   await page.setViewport({ width: 1200, height: 900 });
@@ -465,24 +463,15 @@ try {
   await focus(page);
   pass("an open command picker and browser commands work after the service worker stops");
 
-  const fingerprint = JSON.stringify(await bridgeFingerprint());
-  const stale = bundle.replace(`fingerprint: ${fingerprint}`, 'fingerprint: "outdated"');
-  assert.notEqual(stale, bundle);
-  await Deno.writeTextFile(path.join(extension, "stale.js"), stale);
-  await Deno.writeTextFile(
-    path.join(extension, "stale.html"),
-    patchedHtml.replace('src="/vimium2/bridge-0.js"', 'src="/stale.js"'),
-  );
-  const stalePage = await browser.newPage();
-  await stalePage.goto(`chrome-extension://${extensionId}/stale.html`);
-  await stalePage.waitForSelector("#vimium2-error a");
-  assert.equal(
-    await stalePage.$eval("#vimium2-error a", (a) => a.href),
-    "https://github.com/jaywonchung/vimium2#updating-a-patched-reader",
-  );
-  assert.equal(await stalePage.evaluate(() => typeof NormalMode), "undefined");
-  await stalePage.close();
-  pass("stale bridge code is rejected before starting the core and links to recovery instructions");
+  await testRecoveryNotice({
+    patched,
+    vimiumDirectory: new URL("dist/vimium2", root).pathname,
+    executablePath: values.chrome,
+    url: `chrome-extension://${extensionId}/page.html`,
+    expectedText: "Needle alpha",
+    artifacts: temp,
+    pass,
+  });
 
   await focus(page);
   await vomnibar(page, "o");

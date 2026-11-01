@@ -1205,7 +1205,7 @@ context("Find result scrolling", () => {
   });
 
   for (const useContainer of [false, true]) {
-    should(`reveal a match inside a long paragraph with reader container ${useContainer}`, () => {
+    should(`reveal a match inside a long paragraph with scroll container ${useContainer}`, () => {
       const fixture = document.getElementById("test-div");
       const container = document.createElement("div");
       container.id = "find-scroll-container";

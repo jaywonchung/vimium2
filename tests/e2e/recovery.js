@@ -3,7 +3,7 @@ import * as path from "node:path";
 import puppeteer from "puppeteer";
 
 export async function testRecoveryNotice(
-  { patched, vimiumDirectory, executablePath, url, artifacts, pass },
+  { patched, vimiumDirectory, executablePath, url, expectedText, artifacts, pass },
 ) {
   const filename = path.join(patched.output, "vimium2", "bridge-0.js");
   const bundle = await Deno.readTextFile(filename);
@@ -36,15 +36,20 @@ export async function testRecoveryNotice(
       if (message.type() === "error") errors.push(message.text());
     });
     await page.goto(url);
-    const reader = await page.waitForFrame((frame) =>
+    const originalUrl = page.url();
+    const extensionFrame = await page.waitForFrame((frame) =>
       frame.url().startsWith(`chrome-extension://${bridgeExtensionId}/`)
     );
-    await reader.waitForFunction(() => globalThis.__vimium2?.state === "error");
-    await reader.waitForFunction(() => document.body.textContent.includes("Needle alpha"));
-    await reader.evaluate(() =>
+    await extensionFrame.waitForFunction(() => globalThis.__vimium2?.state === "error");
+    await extensionFrame.waitForFunction(
+      (text) => document.body.textContent.includes(text),
+      {},
+      expectedText,
+    );
+    await extensionFrame.evaluate(() =>
       new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     );
-    const notice = await reader.$eval("#vimium2-error", (element) => ({
+    const notice = await extensionFrame.$eval("#vimium2-error", (element) => ({
       text: element.textContent,
       height: element.getBoundingClientRect().height,
       viewport: innerHeight,
@@ -53,22 +58,22 @@ export async function testRecoveryNotice(
     }));
     assert.equal(
       notice.text,
-      "Vimium2: This extension was patched for a different Vimium2 build. Update instructions.",
+      "Vimium2: This extension was patched for a different Vimium2 build. Patching instructions.",
     );
-    const instructionsUrl = "https://github.com/jaywonchung/vimium2#updating-a-patched-reader";
+    const instructionsUrl = "https://github.com/jaywonchung/vimium2#using-vimium2";
     assert.equal(notice.link, instructionsUrl);
     assert(notice.height > 0 && notice.height <= notice.viewport);
     assert.equal(notice.role, "alert");
-    assert.equal(await reader.evaluate(() => typeof globalThis.NormalMode), "undefined");
+    assert.equal(await extensionFrame.evaluate(() => typeof globalThis.NormalMode), "undefined");
     await page.screenshot({ path: path.join(artifacts, "recovery.png") });
     const opened = browser.waitForTarget((target) => target.url() === instructionsUrl);
-    await reader.click("#vimium2-error a");
+    await extensionFrame.click("#vimium2-error a");
     await (await (await opened).page()).close();
-    assert.equal(page.url().includes("sample.pdf"), true, "The PDF tab remains open");
+    assert.equal(page.url(), originalUrl, "The original tab remains open at the same URL");
     pass(
-      "a stale reader links to README update instructions in a new tab before enabling keys",
+      "a mismatched extension links to README patching instructions in a new tab before enabling keys",
     );
-    assert.equal(errors.length, 1, "The stale reader emits one expected mismatch error");
+    assert.equal(errors.length, 1, "The extension emits one expected mismatch error");
     assert.match(errors[0], /patched for a different Vimium2 build/);
     return errors;
   } finally {

@@ -69,7 +69,7 @@ export async function patchExtension({ profile, source, output, vimiumId }) {
   output = path.resolve(output);
   if (await exists(output)) {
     throw new Error(
-      `Output already exists: ${output}. Choose a new directory.`,
+      `Output already exists: ${output}. Rerun with --output pointing to a directory that does not exist.`,
     );
   }
   output = await resolveDestination(output);
@@ -170,8 +170,8 @@ export async function patchExtension({ profile, source, output, vimiumId }) {
     });
     await Deno.mkdir(path.join(stage, "vimium2"));
     await Deno.copyFile(
-      path.join(projectRoot, "MIT-LICENSE.txt"),
-      path.join(stage, "vimium2", "MIT-LICENSE.txt"),
+      path.join(projectRoot, "LICENSE"),
+      path.join(stage, "vimium2", "LICENSE"),
     );
     for (const page of pages) {
       await Deno.writeTextFile(path.join(stage, page.bundlePath), page.bundle);
@@ -184,7 +184,9 @@ export async function patchExtension({ profile, source, output, vimiumId }) {
       JSON.stringify(manifest, null, 2) + "\n",
     );
     if (await exists(output)) {
-      throw new Error(`Output appeared during patching: ${output}`);
+      throw new Error(
+        `Output appeared during patching: ${output}. Rerun with --output pointing to a directory that does not exist.`,
+      );
     }
     await Deno.rename(stage, output);
   } catch (error) {

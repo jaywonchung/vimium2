@@ -6,24 +6,26 @@ import { unpackCrx } from "../integrations/source.js";
 
 const vimiumId = "a".repeat(32);
 const targets = ["google-scholar-pdf-reader", "pdfjs-pdf-viewer"];
+const genericProfile = { name: "Fixture extension", pages: [{ html: "page.html" }] };
 
-async function fixture(target, run) {
+async function fixture(profile, run) {
   const temp = await Deno.makeTempDir({ prefix: "vimium2-patcher-test-" });
   const source = path.join(temp, "source");
   const output = path.join(temp, "output");
-  const profile = await loadIntegration(path.join(projectRoot, "integrations", target));
   const manifest = {
     manifest_version: 3,
     name: profile.name,
     version: "1.0.0",
     key: "original-key",
     update_url: "https://example.com/update",
-    background: { service_worker: profile.serviceWorker },
     permissions: ["storage"],
     content_security_policy: {
       extension_pages: "script-src 'self'; frame-src 'self'",
     },
   };
+  if (profile.serviceWorker !== undefined) {
+    manifest.background = { service_worker: profile.serviceWorker };
+  }
   await Deno.mkdir(path.dirname(path.join(source, profile.pages[0].html)), {
     recursive: true,
   });
@@ -31,27 +33,30 @@ async function fixture(target, run) {
   await Deno.writeTextFile(path.join(source, "manifest.json"), manifestText);
   await Deno.writeTextFile(
     path.join(source, profile.pages[0].html),
-    "<!doctype html><html><head></head><body>Reader</body></html>",
+    "<!doctype html><html><head></head><body>Extension page</body></html>",
   );
-  await Deno.writeTextFile(
-    path.join(source, profile.serviceWorker),
-    "// Test fixture.\n",
-  );
+  if (profile.serviceWorker !== undefined) {
+    await Deno.writeTextFile(
+      path.join(source, profile.serviceWorker),
+      "// Test fixture.\n",
+    );
+  }
   await Deno.mkdir(path.join(source, "_metadata"));
   await Deno.writeTextFile(
     path.join(source, "_metadata", "verified_contents.json"),
     "{}",
   );
   try {
-    await run({ source, output, target, profile, manifest, manifestText });
+    await run({ source, output, profile, manifest, manifestText });
   } finally {
     await Deno.remove(temp, { recursive: true });
   }
 }
 
 for (const target of targets) {
+  const profile = await loadIntegration(path.join(projectRoot, "integrations", target));
   Deno.test(`${target}: patch an MV3 copy without changing source or script permissions`, () =>
-    fixture(target, async ({ source, output, profile, manifestText }) => {
+    fixture(profile, async ({ source, output, profile, manifestText }) => {
       await patchExtension({ profile, source, output, vimiumId });
       assert.equal(
         await Deno.readTextFile(path.join(source, "manifest.json")),
@@ -72,7 +77,10 @@ for (const target of targets) {
       const html = await Deno.readTextFile(path.join(output, profile.pages[0].html));
       assert(html.includes('src="/vimium2/bridge-0.js"'));
       assert(html.includes(`data-vimium-id="${vimiumId}"`));
-      assert(await exists(path.join(output, "vimium2", "MIT-LICENSE.txt")));
+      assert.equal(
+        await Deno.readTextFile(path.join(output, "vimium2", "LICENSE")),
+        await Deno.readTextFile(path.join(projectRoot, "LICENSE")),
+      );
       await assert.rejects(
         () => patchExtension({ profile, source, output, vimiumId }),
         /already exists/,
@@ -96,7 +104,7 @@ for (const target of targets) {
 }
 
 Deno.test("reject nested output before creating directories in the source", () =>
-  fixture("google-scholar-pdf-reader", async ({ source, profile }) => {
+  fixture(genericProfile, async ({ source, profile }) => {
     const output = path.join(source, "new-parent", "output");
     await assert.rejects(
       () => patchExtension({ profile, source, output, vimiumId }),
@@ -106,7 +114,7 @@ Deno.test("reject nested output before creating directories in the source", () =
   }));
 
 Deno.test("patch read-only package files without changing source permissions", () =>
-  fixture("google-scholar-pdf-reader", async ({ source, output, profile }) => {
+  fixture(genericProfile, async ({ source, output, profile }) => {
     const html = path.join(source, profile.pages[0].html);
     await Deno.chmod(html, 0o444);
     await patchExtension({ profile, source, output, vimiumId });
@@ -119,21 +127,24 @@ Deno.test("patch read-only package files without changing source permissions", (
   }));
 
 Deno.test("reject changed target layouts before creating output", () =>
-  fixture("pdfjs-pdf-viewer", async ({ source, profile, output, manifest }) => {
-    manifest.background.service_worker = "unknown.js";
-    await Deno.writeTextFile(
-      path.join(source, "manifest.json"),
-      JSON.stringify(manifest),
-    );
-    await assert.rejects(
-      () => patchExtension({ profile, source, output, vimiumId }),
-      /needs review/,
-    );
-    assert.equal(await exists(output), false);
-  }));
+  fixture(
+    { ...genericProfile, serviceWorker: "background.js" },
+    async ({ source, profile, output, manifest }) => {
+      manifest.background.service_worker = "unknown.js";
+      await Deno.writeTextFile(
+        path.join(source, "manifest.json"),
+        JSON.stringify(manifest),
+      );
+      await assert.rejects(
+        () => patchExtension({ profile, source, output, vimiumId }),
+        /needs review/,
+      );
+      assert.equal(await exists(output), false);
+    },
+  ));
 
 Deno.test("reject symbolic links in source packages", () =>
-  fixture("google-scholar-pdf-reader", async ({ source, profile, output }) => {
+  fixture(genericProfile, async ({ source, profile, output }) => {
     await Deno.symlink(
       path.join(source, "manifest.json"),
       path.join(source, "linked.json"),
@@ -146,7 +157,7 @@ Deno.test("reject symbolic links in source packages", () =>
   }));
 
 Deno.test("patch a directory integration offline from unpacked files or a CRX package", () =>
-  fixture("google-scholar-pdf-reader", async ({ source, output, profile, manifestText }) => {
+  fixture(genericProfile, async ({ source, output, profile, manifestText }) => {
     const directory = path.join(path.dirname(source), "custom integration");
     await Deno.mkdir(directory);
     await Deno.writeTextFile(
@@ -155,7 +166,7 @@ Deno.test("patch a directory integration offline from unpacked files or a CRX pa
     );
     const crx = path.join(path.dirname(source), "extension.crx");
     const archive = {};
-    for (const filename of ["manifest.json", profile.pages[0].html, profile.serviceWorker]) {
+    for (const filename of ["manifest.json", profile.pages[0].html]) {
       archive[filename] = await Deno.readFile(path.join(source, filename));
     }
     await Deno.writeFile(crx, makeCrx(archive));

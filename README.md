@@ -1,183 +1,123 @@
-# Vimium - The Hacker's Browser
+# Vimium2
 
-Vimium is a browser extension that provides keyboard-based navigation and control of the web in the
-spirit of the Vim editor.
+[Vimium](https://github.com/philc/vimium), but also works inside other Chrome extensions.
 
-[Watch the demo video](https://www.youtube.com/watch?v=t67Sn0RGK54).
+Vimium's shortcuts don't work inside other extensions, such as PDF readers.
+Vimium2 is a Vimium fork that makes it work.
 
-**Installation instructions:**
+## Background: How Vimium works
 
-- Chrome:
-  [Chrome web store](https://chromewebstore.google.com/detail/vimium/dbepggeogbaibhgnhhndojpepiihcmeb)
-- Edge:
-  [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/vimium/djmieaghokpkpjfbpelnlkfgfjapaopa)
-- Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-GB/firefox/addon/vimium-ff/)
+```mermaid
+flowchart TB
+  subgraph Website["Website"]
+    WC["Injected code"]:::vimium
+  end
+  subgraph Vimium["Vimium extension"]
+    BG["Service worker and settings"]:::vimium
+    UI["Vomnibar, help, and status panel"]:::vimium
+    UI <--> BG
+  end
+  WC <--> BG
+  WC <--> UI
+  classDef vimium fill:#dbeafe,stroke:#2563eb,color:#172554
+```
 
-To install from source, see [here](CONTRIBUTING.md#installing-from-source).
+Vimium injects code into web pages, which listens for keyboard events.
+Particularly for browser commands like switching or closing tabs and populating Vomnibar results, the injected code communicates with Vimium's service worker (background daemon).
 
-Vimium's Options page can be reached via a link on the help dialog (type `?`) or via the button next
-to Vimium on the extension pages of Chrome and Edge (`chrome://extensions`), or Firefox
-(`about:addons`).
+However, Chrome extensions are isolated from each other, so Vimium can't automatically inject code into other extensions.
 
-## Keyboard Bindings
+## How Vimium2 works
 
-Modifier keys are specified as `<c-x>`, `<m-x>`, and `<a-x>` for ctrl+x, meta+x, and alt+x
-respectively. For shift+x and ctrl-shift-x, just type `X` and `<c-X>`. See the next section for how
-to customize these bindings.
+For regular websites, Vimium2 works the same way as Vimium.
+For other extensions, you will one-time manually inject Vimium2's injected code which will then communicate with Vimium2's service worker via *cross-extension messaging*.
 
-Once you have Vimium installed, you can see this list of key bindings at any time by typing `?`.
+Blue components come from Vimium, with changes where needed.
+Green components are added by Vimium2.
 
-Navigating the current page:
+```mermaid
+flowchart TB
+  subgraph Website["Website"]
+    WC["Injected code"]:::vimium
+    LB["Local backend"]:::vimium2
+    WC <--> LB
+  end
+  subgraph Target["Patched extension page"]
+    EC["Injected code"]:::vimium
+    RB["Remote backend"]:::vimium2
+    EC <--> RB
+  end
+  subgraph Vimium2["Vimium2 extension"]
+    BP["Bridge"]:::vimium2
+    BG["Service worker and settings"]:::vimium
+    UI["Vomnibar, help, and status panel"]:::vimium
+    BP <--> BG
+    UI <--> BG
+  end
+  LB <--> BG
+  RB <--> BP
+  WC <--> UI
+  EC <--> UI
+  classDef vimium fill:#dbeafe,stroke:#2563eb,color:#172554
+  classDef vimium2 fill:#dcfce7,stroke:#16a34a,color:#14532d
+```
 
-    ?       show the help dialog for a list of all available keys
-    h       scroll left
-    j       scroll down
-    k       scroll up
-    l       scroll right
-    gg      scroll to top of the page
-    G       scroll to bottom of the page
-    d       scroll down half a page
-    u       scroll up half a page
-    f       open a link in the current tab
-    F       open a link in a new tab
-    r       reload
-    gs      view source
-    i       enter insert mode -- all commands will be ignored until you hit Esc to exit
-    yy      copy the current url to the clipboard
-    yf      copy a link url to the clipboard
-    gf      cycle forward to the next frame
-    gF      focus the main/top frame
+## Using Vimium2
 
-Navigating to new pages:
+> [!NOTE]
+> If you landed here from the error message "Vimium2: This extension was patched for a different Vimium2 build.", it probably means that your Vimium2 and patched extension went out of sync. Rebuilding Vimium2, re-patching the extension(s), and reloading them should fix it.
 
-    o       Open URL, bookmark, or history entry
-    O       Open URL, bookmark, history entry in a new tab
-    b       Open bookmark
-    B       Open bookmark in a new tab
+Vimium2's architecture should in theory work with most extensions.
+See [`integrations/`](integrations/) for officially supported extensions.
 
-Using find:
+The overall patching process is:
 
-    /       enter find mode
-              -- type your search query and hit enter to search, or Esc to cancel
-    n       cycle forward to the next find match
-    N       cycle backward to the previous find match
+1. Build Vimium2 and load it into Chrome.
+1. Patch the target extension with Vimium2's injected code, and load it into Chrome.
+1. Add the patched extension's ID to Vimium2's **Allowed Bridge Extensions**.
 
-For advanced usage, see [regular expressions](https://github.com/philc/vimium/wiki/Find-Mode) on the
-wiki.
+### 1. Build Vimium2 and load it into Chrome
 
-Navigating your history:
+You need [Deno 2](https://deno.com/) and Chrome (I haven't tested these on other Chromium-based browsers).
 
-    H       go back in history
-    L       go forward in history
+1. Clone this repository and build Vimium2: `deno task build`
+1. Open `chrome://extensions` and turn on **Developer mode**.
+1. If you have Vimium installed, disable it. Then, choose **Load unpacked** and select `dist/vimium2`.
+1. Copy the extension ID from Vimium2's card.
 
-Manipulating tabs:
+### 2. Patch the target extension and load it into Chrome
 
-    J, gT   go one tab left
-    K, gt   go one tab right
-    g0      go to the first tab. Use ng0 to go to n-th tab
-    g$      go to the last tab
-    ^       visit the previously-visited tab
-    t       create tab
-    yt      duplicate current tab
-    x       close current tab
-    X       restore closed tab (i.e. unwind the 'x' command)
-    T       search through your open tabs
-    W       move current tab to new window
-    <a-p>   pin/unpin current tab
+`deno task patch [integration subdir]` will patch the target extension and create a new directory under `dist/` with the patched extension.
 
-Using marks:
+For instance, for Google Scholar PDF Reader:
 
-    ma, mA  set local mark "a" (global mark "A")
-    `a, `A  jump to local mark "a" (global mark "A")
-    ``      jump back to the position before the previous jump
-              -- that is, before the previous gg, G, n, N, / or `a
+```sh
+deno task patch integrations/google-scholar-pdf-reader \
+  --vimium-id VIMIUM2_ID --chrome-version CHROME_VERSION
+```
 
-Additional advanced browsing commands:
+Replace `VIMIUM2_ID` with Vimium2's ID from Step 1 or `chrome://extensions`, and `CHROME_VERSION` with the full version at `chrome://version` (e.g., `153.0.8010.36`).
+This will download the target extension from Chrome Web Store for the supplied Chrome version, patch it, and print the directory of the patched extension.
+You can also directly supply the extension to patch; see `deno task patch --help`.
 
-    ]], [[  Follow the link labeled 'next' or '>' ('previous' or '<')
-              - helpful for browsing paginated sites
-    <a-f>   open multiple links in a new tab
-    gi      focus the first (or n-th) text input box on the page. Use <tab> to cycle through options.
-    gu      go up one level in the URL hierarchy
-    gU      go up to root of the URL hierarchy
-    ge      edit the current URL
-    gE      edit the current URL and open in a new tab
-    zH      scroll all the way left
-    zL      scroll all the way right
-    v       enter visual mode; use p/P to paste-and-go, use y to yank
-    V       enter visual line mode
-    R       Hard reload the page (skip the cache)
+Once patching is complete, navigate to `chrome://extensions` and load the patched extension with **Load unpacked**. You should disable/remove any original or previously patched version of the extension.
 
-Vimium supports command repetition so, for example, hitting `5t` will open 5 tabs in rapid
-succession. `<Esc>` (or `<c-[>`) will clear any partial commands in the queue and will also exit
-insert and find modes.
+### 3. Add the patched extension's ID to Vimium2
 
-There are additional commands which aren't included in this README; refer to the help dialog (type
-`?`) for a full list.
+You need to explicitly whitelist the patched extension from Vimium2's settings so that random (potentially malicious) extensions don't have access to Vimium2.
 
-## Custom Key Mappings
+1. Copy the patched extension's new ID.
+1. Open Vimium2's options, add that ID to **Allowed Bridge Extensions**, and save.
+1. Reload the extension's tab. Vimium2 should now work.
 
-You may remap or unmap any of the default key bindings in the "Custom key mappings" on the options
-page.
+## Adding integrations for other extensions
 
-Enter one of the following key mapping statements per line:
+Each integration has its own directory under [`integrations/`](integrations/).
+Its `integration.js` describes what to patch; an optional `page.js` contains code that runs inside the target extension.
+Integrations currently support pages in tabs and embedded frames, but not popups or side panels.
 
-- `map key command`: Maps a key to a Vimium command. Overrides Chrome's default behavior for that
-  key, if any.
-- `unmap key`: Unmaps a key and restores Chrome's default behavior (if any).
-- `unmapAll`: Unmaps all bindings. This is useful if you want to completely wipe Vimium's defaults
-  and start from scratch with your own setup.
+## Acknowledgments
 
-Examples:
+Vimium is awesome. I can't imagine life without it.
 
-- `map <c-d> scrollPageDown` maps ctrl+d to scrolling the page down. Chrome's default behavior of
-  showing a bookmark dialog is suppressed.
-- `map r reload hard` maps the r key to reloading the page, and also includes the "hard" option to
-  hard-reload the page.
-- `unmap <c-d>` removes any mapping for ctrl+d and restores Chrome's default behavior.
-- `unmap r` removes any mapping for the r key.
-
-See the [docs](https://vimium.github.io/commands/) for every Vimium command and its options.
-
-You can add comments to key mappings by starting a line with `"` or `#`.
-
-The following special keys are available for mapping:
-
-- `<c-*>`, `<a-*>`, `<s-*>`, `<m-*>` for ctrl, alt, shift, and meta (command on Mac) respectively
-  with any key. Replace `*` with the key of choice.
-- `<left>`, `<right>`, `<up>`, `<down>` for the arrow keys.
-- `<f1>` through `<f12>` for the function keys.
-- `<space>` for the space key.
-- `<tab>`, `<enter>`, `<delete>`, `<backspace>`, `<insert>`, `<home>` and `<end>` for the
-  corresponding non-printable keys.
-
-Shifts are automatically detected so, for example, `<c-&>` corresponds to ctrl+shift+7 on an English
-keyboard.
-
-## How to allow Vimium to work on new tab pages
-
-- Vimium will work on new tab pages which are opened with Vimium's `createTab` command (mapped to
-  `t` by default).
-- To have Vimium work on <em>all</em> new tab pages opened by the browser (e.g. via `cmd-t` or
-  `ctrl-t` shortcuts), a companion
-  [Vimium New Tab Page extension](https://github.com/philc/vimium-new-tab/) is required.
-- Once that is installed, all new tabs will open a blank Vimium new tab page.
-
-## More documentation
-
-- [FAQ](https://github.com/philc/vimium/wiki/FAQ)
-- [Command listing](https://vimium.github.io/commands/)
-- [Vimium's GitHub wiki](https://github.com/philc/vimium/wiki): documentation for the more advanced
-  features.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-## Release Notes
-
-See [CHANGELOG](CHANGELOG.md) for the major changes in each release.
-
-## License
-
-Copyright (c) Phil Crosby, Ilya Sukhar. See [MIT-LICENSE.txt](MIT-LICENSE.txt) for details.
+Ideally I want to upstream this idea to Vimium ([philc/vimium#4874](https://github.com/philc/vimium/issues/4874)), but it isn't making much progress.

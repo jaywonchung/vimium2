@@ -53,7 +53,7 @@ const files = [
   "pages",
   "icons",
   "resources",
-  "MIT-LICENSE.txt",
+  "LICENSE",
 ];
 await Deno.mkdir(path.join(root, "dist"), { recursive: true });
 const stage = await Deno.makeTempDir({

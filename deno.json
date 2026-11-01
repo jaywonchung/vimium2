@@ -4,7 +4,8 @@
       "icons/*.svg",
       "**/*.html"
     ],
-    "lineWidth": 100
+    "lineWidth": 100,
+    "proseWrap": "preserve"
   },
   "imports": {
     "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@^0.1.49",

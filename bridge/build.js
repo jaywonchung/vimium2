@@ -51,7 +51,7 @@ export async function buildBridge({ pageUrlProvider } = {}) {
   );
   const bridgeCss =
     ":root > div.vimium-reset:not(#vimium-hint-marker-container) { position: fixed !important; top: 0 !important; left: 0 !important; width: 0 !important; height: 0 !important; overflow: visible !important; z-index: 2147483647 !important; } body.vimium-find-mode ::selection { background: #ff9632 !important; color: #000 !important; }";
-  return `// Vimium2 bridge. See the accompanying MIT-LICENSE.txt.\n(function () {
+  return `// Vimium2 bridge. See the accompanying LICENSE.\n(function () {
   "use strict";
   if (globalThis.__vimium2) throw new Error("Vimium2 is already initialized.");
   const state = globalThis.__vimium2 = { state: "connecting", protocol: 1 };
@@ -80,8 +80,8 @@ export async function buildBridge({ pageUrlProvider } = {}) {
       notice.textContent = "Vimium2: " + error.message;
       if (error.code === "CORE_MISMATCH") {
         const link = document.createElement("a");
-        link.href = "https://github.com/jaywonchung/vimium2#updating-a-patched-reader";
-        link.textContent = "Update instructions";
+        link.href = "https://github.com/jaywonchung/vimium2#using-vimium2";
+        link.textContent = "Patching instructions";
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.style.cssText = "color:#0645ad;text-decoration:underline";
