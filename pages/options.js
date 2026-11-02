@@ -22,6 +22,7 @@ const options = {
   searchEngines: "string",
   settingsVersion: "string", // This is a hidden field.
   smoothScroll: "boolean",
+  swapTabNavigationKeys: "boolean",
   userDefinedLinkHintCss: "string",
   waitForEnterForFilteredHints: "boolean",
   allowedBridgeExtensions: "csv",

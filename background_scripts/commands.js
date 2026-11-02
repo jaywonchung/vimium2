@@ -303,9 +303,13 @@ const Commands = {
     this.keyToRegistryEntry = {};
     this.mapKeyRegistry = {};
 
-    const defaultKeyConfig = Object.keys(defaultKeyMappings).map((key) =>
-      `map ${key} ${defaultKeyMappings[key]}`
-    ).join("\n");
+    const keyMappings = { ...defaultKeyMappings };
+    if (Settings.get("swapTabNavigationKeys")) {
+      keyMappings.J = "nextTab";
+      keyMappings.K = "previousTab";
+    }
+    const defaultKeyConfig = Object.keys(keyMappings).map((key) => `map ${key} ${keyMappings[key]}`)
+      .join("\n");
 
     const parsed = KeyMappingsParser.parse(
       defaultKeyConfig + "\n" + userKeyMappingsConfigText,
