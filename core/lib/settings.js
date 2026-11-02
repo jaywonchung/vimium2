@@ -60,7 +60,7 @@ w: https://www.wikipedia.org/w/index.php?title=Special:Search&search=%s Wikipedi
 
 # More examples.
 #
-# (Vimium supports search completion Wikipedia, as
+# (Vimium2 supports search completion Wikipedia, as
 # above, and for these.)
 #
 # g: https://www.google.com/search?q=%s Google

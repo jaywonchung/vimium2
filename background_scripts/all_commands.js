@@ -172,7 +172,7 @@ const allCommands = [
     name: "passNextKey",
     desc: "Pass the next key to the page",
     options: {
-      normal: "Optional. Enter Vimium's normal mode, and ignore any defined pass keys.",
+      normal: "Optional. Enter Vimium2's normal mode, and ignore any defined pass keys.",
     },
     group: "navigation",
     advanced: true,
@@ -307,7 +307,7 @@ const allCommands = [
     options: {
       query: "The text to prefill the Vomnibar with.",
       keyword: 'The keyword of a search engine defined in the "Custom search engines" ' +
-        "section of the Vimium Options page. The Vomnibar will be scoped to use that search engine.",
+        "section of the Vimium2 Options page. The Vomnibar will be scoped to use that search engine.",
     },
     group: "vomnibar",
     topFrame: true,
@@ -321,7 +321,7 @@ const allCommands = [
     options: {
       query: "The text to prefill the Vomnibar with.",
       keyword: 'The keyword of a search engine defined in the "Custom search engines" ' +
-        "section of the Vimium Options page. The Vomnibar will be scoped to use that search engine.",
+        "section of the Vimium2 Options page. The Vomnibar will be scoped to use that search engine.",
     },
     topFrame: true,
     noRepeat: true,
@@ -375,7 +375,7 @@ const allCommands = [
 
   {
     name: "Vomnibar.activateCommandSelection",
-    desc: "Execute a Vimium command",
+    desc: "Execute a Vimium2 command",
     group: "vomnibar",
     topFrame: true,
     noRepeat: true,

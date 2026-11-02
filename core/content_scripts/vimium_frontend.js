@@ -114,7 +114,7 @@ class GrabBackFocus extends Mode {
     if (!this.logged && (element !== document.body)) {
       this.logged = true;
       if (!globalThis.vimiumDomTestsAreRunning) {
-        console.log("An auto-focusing action on this page was blocked by Vimium.");
+        console.log("An auto-focusing action on this page was blocked by Vimium2.");
       }
     }
     element.blur();
@@ -206,7 +206,7 @@ function installListener(element, event, callback) {
     event,
     forTrusted(function () {
       if (extensionHasBeenUnloaded()) {
-        console.log("Vimium extension has been unloaded. Unloading content script.");
+        console.log("Vimium2 extension has been unloaded. Unloading content script.");
         onUnload();
         return;
       }

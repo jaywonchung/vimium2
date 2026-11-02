@@ -908,9 +908,9 @@ async function showUpgradeMessageIfNecessary(onInstalledDetails) {
     {
       type: "basic",
       iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-      title: "Vimium Upgrade",
+      title: "Vimium2 Upgrade",
       message:
-        `Vimium has been upgraded to version ${currentVersion}. Click here for more information.`,
+        `Vimium2 has been upgraded to version ${currentVersion}. Click here for more information.`,
       isClickable: true,
     },
   );
@@ -922,7 +922,7 @@ async function showUpgradeMessageIfNecessary(onInstalledDetails) {
       TabOperations.openUrlInNewTab({
         tab,
         tabId: tab.id,
-        url: "https://github.com/philc/vimium/blob/master/CHANGELOG.md",
+        url: "https://github.com/jaywonchung/vimium2/blob/master/CHANGELOG.md",
       });
     });
   }

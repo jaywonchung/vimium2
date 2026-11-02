@@ -361,7 +361,7 @@ function onUploadBackupClicked() {
         backup = JSON.parse(reader.result);
       } catch (error) {
         console.log("parsing error:", error);
-        alert("Failed to parse Vimium backup: " + error);
+        alert("Failed to parse Vimium2 backup: " + error);
         return;
       }
 

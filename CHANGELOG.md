@@ -1,3 +1,15 @@
+# Changelog
+
+## Vimium2
+
+### Unreleased
+
+- Use Vimium inside other extensions, with integrations for Google Scholar PDF Reader and PDF.js.
+- Configure which patched extensions can connect in Vimium2's options.
+- Build Vimium2 and patch supported extensions with Deno.
+
+## Upstream Vimium history
+
 2.4.1, 2.4.2 (2026-03-07)
 
 - Fix issue where existing users were mistakenly opted-in to
